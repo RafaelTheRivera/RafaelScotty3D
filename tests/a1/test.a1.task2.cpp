@@ -185,4 +185,44 @@ Test test_a1_task2_simple_vertical("a1.task2.simple.vertical", []() {
 	);
 });
 
+Test test_a1_task2_test1("a1.task2.simple.test1", []() {
+	check_line_covers(
+		"vertical line",
+		{ Vec2(1.125f, 1.125f), Vec2(1.125f, 6.875f) },
+		{ "...",
+		 ".#.",
+		 ".#.",
+		 ".#.",
+		 ".#.",
+		 ".#.",
+		 ".#.",
+		 "..." }
+	);
+	});
+
+Test test_a1_task2_test2("a1.task2.test2", []() {
+	check_line_covers(
+		"diagonal length 2",
+		{ Vec2(0.0f, 0.0f), Vec2(2.0f, 2.0f) },
+		{ ".....",
+		 ".#...",
+		 "#...." }
+	);
+	});
+
+Test test_a1_task2_test3("a1.task2.test3", []() {
+	check_line_covers(
+		"diagonal length 8",
+		{ Vec2(0.0f, 0.0f), Vec2(8.0f, 8.0f) },
+		{ ".......#.",
+		 "......#..",
+		 ".....#...",
+		 "....#....",
+		 "...#.....",
+		 "..#......",
+		 ".#......",
+		 "#......." }
+	);
+	});
+
 

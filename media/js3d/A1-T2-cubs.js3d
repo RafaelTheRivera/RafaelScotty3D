@@ -1,0 +1,124 @@
+{"scene":{
+	"FORMAT":"js3d-v1",
+	"transforms":{
+		"Bunny_transform":{
+			"parent":null,
+			"translation":[-2.25,0,0],
+			"rotation":[0,-0.34202009439468384,0,0.9396926164627075],
+			"scale":[1,1,1]
+		},
+		"Camera_transform":{
+			"parent":null,
+			"translation":[0,1.5740000009536743,5.315465450286865],
+			"rotation":[-0.14954335987567902,2.0239090403606497e-08,-1.3381718133587128e-07,0.9887551665306091],
+			"scale":[1,1,1]
+		},
+		"Transform":{
+			"parent":null,
+			"translation":[-0.75,0,0],
+			"rotation":[0,-0.34202009439468384,0,0.9396926164627075],
+			"scale":[1,1,1]
+		},
+		"Transform 1":{
+			"parent":null,
+			"translation":[0.75,0,0],
+			"rotation":[0,-0.34202009439468384,0,0.9396926164627075],
+			"scale":[1,1,1]
+		},
+		"Transform 2":{
+			"parent":null,
+			"translation":[2.25,0,0],
+			"rotation":[0,-0.34202009439468384,0,0.9396926164627075],
+			"scale":[1,1,1]
+		}
+	},
+	"cameras":{
+		"Camera":{
+			"vertical_fov":22.229999542236328,
+			"aspect_ratio":3,
+			"near_plane":0.10000000149011612,
+			"film.width":1500,
+			"film.height":500,
+			"film.samples":32,
+			"film.max_ray_depth":8,
+			"film.sample_pattern":"Center"
+		}
+	},
+	"meshes":{
+		"Bunny_mesh":{ "FORMAT":"s3d-hm-1","halfedge_nexts":"uint32:AgAAABMAAAAEAAAAFgAAAAYAAAAUAAAAAAAAABAAAAAKAAAAEgAAAAwAAAARAAAADgAAABUAAAAIAAAAFwAAAAkAAAAFAAAABwAAAA8AAAALAAAAAwAAAA0AAAABAAAA","halfedge_corner_uvs":"vec2:AAAAAAAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AACAPwAAAAAAAIA/AAAAAAAAgD8AAAAAAACAPwAAAAAAAIA/AACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACAPwAAAAAAAIA/AAAAAAAAgD8AAIA/AACAPwAAAAAAAAAAAAAAAAAAgD8AAIA/AACAPwAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/","halfedge_corner_normals":"vec3:AAAAAAAAAAAAAIC/AACAvwAAAAAAAAAAAAAAAAAAAAAAAIC/AAAAAAAAgD8AAAAAAAAAAAAAAAAAAIC/AACAPwAAAAAAAAAAAAAAAAAAAAAAAIC/AAAAAAAAgL8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAgL8AAAAAAAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AACAvwAAAAAAAAAAAAAAAAAAgL8AAAAAAACAPwAAAAAAAAAAAAAAAAAAgL8AAAAAAACAvwAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAACAvwAAAAAAAAAA","bone_weight_bones":"uint32:","bone_weight_weights":"float:","vertex_halfedges":"uint32:AAAAAAYAAAACAAAABAAAAAgAAAAKAAAADgAAAAwAAAA","vertex_positions":"vec3:j8L1vo/C9b6PwvW+j8L1Po/C9b6PwvW+j8L1vo/C9T6PwvW+j8L1Po/C9T6PwvW+j8L1vo/C9b6PwvU+j8L1Po/C9b6PwvU+j8L1vo/C9T6PwvU+j8L1Po/C9T6PwvU+","vertex_bone_weight_ends":"uint32:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","edge_sharps":"bool://g","face_halfedges":"uint32:AAAAAAgAAAAHAAAABQAAAAMAAAABAAAA","face_boundaries":"bool:Ag"}
+	},
+	"skinned_meshes":{},
+	"shapes":{},
+	"particles":{},
+	"textures":{
+		"white":{
+			"type":"Constant",
+			"color":[1,0,0],
+			"scale":1
+		}
+	},
+	"materials":{
+		"lam_white":{
+			"type":"Lambertian",
+			"albedo":"white"
+		}
+	},
+	"delta_lights":{},
+	"env_lights":{},
+	"instances":{
+		"cameras":{
+			"Camera_instance":{
+				"transform":"Camera_transform",
+				"camera":"Camera"
+			}
+		},
+		"meshes":{
+			"Bunny_instance":{
+				"transform":"Bunny_transform",
+				"mesh":"Bunny_mesh",
+				"material":"lam_white",
+				"visible":true,
+				"collides":true,
+				"draw style":"Wireframe",
+				"blend style":"Blend Replace",
+				"depth style":"Depth Less"
+			},
+			"Mesh Instance":{
+				"transform":"Transform",
+				"mesh":"Bunny_mesh",
+				"material":"lam_white",
+				"visible":true,
+				"collides":true,
+				"draw style":"Wireframe",
+				"blend style":"Blend Replace",
+				"depth style":"Depth Less"
+			},
+			"Mesh Instance 1":{
+				"transform":"Transform 1",
+				"mesh":"Bunny_mesh",
+				"material":"lam_white",
+				"visible":true,
+				"collides":true,
+				"draw style":"Wireframe",
+				"blend style":"Blend Replace",
+				"depth style":"Depth Less"
+			},
+			"Mesh Instance 2":{
+				"transform":"Transform 2",
+				"mesh":"Bunny_mesh",
+				"material":"lam_white",
+				"visible":true,
+				"collides":true,
+				"draw style":"Wireframe",
+				"blend style":"Blend Replace",
+				"depth style":"Depth Less"
+			}
+		},
+		"skinned_meshes":{},
+		"shapes":{},
+		"particles":{},
+		"delta_lights":{},
+		"env_lights":{}
+	}
+},"animator":{"FORMAT":"js3d-v1",
+"splines":{}}}

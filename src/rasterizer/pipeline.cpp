@@ -7,6 +7,7 @@
 #include "../lib/mathlib.h"
 #include "framebuffer.h"
 #include "sample_pattern.h"
+
 template<PrimitiveType primitive_type, class Program, uint32_t flags>
 void Pipeline<primitive_type, Program, flags>::run(std::vector<Vertex> const& vertices,
                                                    typename Program::Parameters const& parameters,
@@ -313,6 +314,7 @@ void Pipeline<p, P, flags>::clip_triangle(
 	emit_vertex(vc);
 }
 
+
 // -------------------------------------------------------------------------
 // rasterization functions
 
@@ -360,14 +362,162 @@ void Pipeline<p, P, flags>::rasterize_line(
 	// TODO: Check out the block comment above this function for more information on how to fill in
 	// this function!
 	// The OpenGL specification section 3.5 may also come in handy.
+	
+	auto diamondOct = [=](float x, float y) {
+		float isoX = x - floor(x);
+		float isoY = y - floor(y);
+		/*
+		1 / | \ 4
+		/ 2 | 3 \
+		---------
+		\ 6 | 7 /
+		5 \ | / 8
+		*/
+		if (isoX <= 0.5f) {
+			if (isoY < 0.5f) {
+				if (isoX + isoY < 0.5f) {
+					return 5;
+				}
+				else {
+					return 6;
+				}
+			}
+			else {
+				if (isoY - isoX >= 0.5f) {
+					return 1;
+				}
+				else {
+					return 2;
+				}
+			}
+		}
+		else {
+			if (isoY < 0.5f) {
+				if (isoX - isoY < 0.5f) {
+					return 7;
+				}
+				else {
+					return 8;
+				}
+			}
+			else {
+				if (isoY + isoX < 1.5f) {
+					return 3;
+				}
+				else {
+					return 4;
+				}
+			}
+		}
+	};
 
-	{ // As a placeholder, draw a point in the middle of the line:
-		//(remove this code once you have a real implementation)
-		Fragment mid;
-		mid.fb_position = (va.fb_position + vb.fb_position) / 2.0f;
-		mid.attributes = va.attributes;
-		mid.derivatives.fill(Vec2(0.0f, 0.0f));
-		emit_fragment(mid);
+	auto exitsDiamond = [=](float x, float y, float slope, bool start) {
+		float isoX = x - floor(x);
+		float isoY = y - floor(y);
+		if (start) {
+			float followY = (0.999f - isoX) * slope + isoY;
+			float followX = 0.999f;
+			if (std::abs(followY) > 1.0f) {
+				followX = (0.999f - isoY) * (1.0f / slope) + isoX;
+				if (slope > 0) { followY = 0.999f; }
+				else { followY = 0.0f; };
+			} // Attempts to calculate the point the line exits the pixel
+			int octLeft = diamondOct(isoX, isoY);
+			int octRight = diamondOct(followX, followY);
+			return (octLeft != octRight); // never crossed anything (start case only possible if never exited)
+		}
+		else {
+			float followY = isoX * (0.0f - slope) + isoY;
+			float followX = 0.0f;
+			if (std::abs(followY) > 1.0f) {
+				followX = isoY * (0.0f - (1.0f / slope)) + isoX;
+				if (slope > 0) { followY = 0.0f; }
+				else { followY = 0.999f; }
+			}// Attempts to calculate the point the line enters the pixel
+			int octLeft = diamondOct(followX, followY);
+			int octRight = diamondOct(isoX, isoY);
+			return ((octRight == 1 || octRight == 4 || octRight == 5 || octRight == 8) && octRight != octLeft);
+		}
+	};
+
+	float x1 = va.fb_position.x; 
+	float y1 = va.fb_position.y;
+	float x2 = vb.fb_position.x; 
+	float y2 = vb.fb_position.y;
+	float dx = x2 - x1; 
+	float dy = y2 - y1;
+	float slope;
+	if (dx == 0) {
+		slope = std::numeric_limits<float>::max();
+	}
+	else {
+		slope = dy / dx;
+	}
+	if (dx > dy){
+		// is x-major
+		if (x1 > x2) {
+			float x3 = x2; float y3 = y2;
+			x2 = x1; y2 = y1;
+			x1 = x3; y1 = y3;
+		}
+		int t1, t2;
+		if (exitsDiamond(x1, y1, slope, true)) {
+			t1 = (int)floor(x1);
+		}
+		else {
+			t1 = (int)floor(x1) + 1;
+		}
+		if (exitsDiamond(x2, y2, slope, false)) {
+			t2 = (int)floor(x2) + 1;
+		}
+		else {
+			t2 = (int)floor(x2);
+		}
+		for (int u = t1; u < t2; u++) 
+		{
+			float w = ((float)u + 0.5f - x1) / (x2 - x1);
+			float v = w * (y2 - y1) + y1;
+			Fragment out;
+			out.fb_position.x = (float)u + 0.5f;
+			out.fb_position.y = (float)floor(v) + 0.5f;
+			out.fb_position.z = ((vb.fb_position.z - va.fb_position.z) / (float)(t2 - t1)) * (float)(u - t1) + va.fb_position.z;
+			out.attributes = va.attributes;
+			out.derivatives.fill(Vec2(0.0f, 0.0f));
+			emit_fragment(out);
+		}
+	}
+	else {
+		// is y-major
+		if (y1 > y2) {
+			float x3 = x2; 
+			float y3 = y2;
+			x2 = x1; y2 = y1;
+			x1 = x3; y1 = y3;
+		}
+		int t1, t2;
+		if (exitsDiamond(x1, y1, slope, true)) {
+			t1 = (int)floor(y1);
+		}
+		else {
+			t1 = (int)floor(y1) + 1;
+		}
+		if (exitsDiamond(x2, y2, slope, false)) {
+			t2 = (int)floor(y2) + 1;
+		}
+		else {
+			t2 = (int)floor(y2);
+		}
+		for (int u = t1; u < t2; u++) {
+			float w = ((float)u + 0.5f - y1) / (y2 - y1);
+			float v = w * (x2 - x1) + x1;
+			Fragment out;
+			out.fb_position.x = (float)floor(v) + 0.5f;
+			out.fb_position.y = (float)(u) + 0.5f;
+			out.fb_position.z = ((vb.fb_position.z - va.fb_position.z) / (float)(t2 - t1)) * (float)(u - t1) + va.fb_position.z;
+			out.attributes = va.attributes;
+			out.derivatives.fill(Vec2(0.0f, 0.0f));
+			emit_fragment(out);
+		}
 	}
 
 }
