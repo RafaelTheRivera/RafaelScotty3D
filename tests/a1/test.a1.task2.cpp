@@ -225,4 +225,24 @@ Test test_a1_task2_test3("a1.task2.test3", []() {
 	);
 	});
 
+// checks that reaching the top point through the diamond "exits" it
+Test test_a1_task2_diamond_top("a1.task2.diamond.top", []() {
+	check_line_covers("line reaches through diamond to its top (1,1)",
+		{ Vec2(0.5f, 0.0f), Vec2(1.5f, 2.0f) },
+		{ "...",
+							   ".#.",
+							   "#.." });
+	});
+
+// checks that reaching the top point not through the diamond doesn't "exit" it
+Test test_a1_task2_diamond_top_no_exit("a1.task2.diamond.top.no.exit", []() {
+	check_line_covers("line reaches not thorugh diamond to its top (1,1)",
+		{ Vec2(0.0f, 1.5f), Vec2(1.5f, 2.0f) },
+		{ "...",
+							   "#..",
+							   "..." });
+	});
+
+	
+
 
