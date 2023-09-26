@@ -1,6 +1,7 @@
 #include "framebuffer.h"
 #include "../util/hdr_image.h"
 #include "sample_pattern.h"
+#include <iostream>
 
 Framebuffer::Framebuffer(uint32_t width_, uint32_t height_, SamplePattern const& sample_pattern_)
 	: width(width_), height(height_), sample_pattern(sample_pattern_) {
@@ -30,10 +31,17 @@ HDR_Image Framebuffer::resolve_colors() const {
 	// TODO: update to support sample patterns with more than one sample.
 
 	HDR_Image image(width, height);
+	size_t spp = sample_pattern.centers_and_weights.size();
+	//std::cout << std::to_string(spp) + " samples\n";
 
 	for (uint32_t y = 0; y < height; ++y) {
 		for (uint32_t x = 0; x < width; ++x) {
-			image.at(x, y) = color_at(x, y, 0);
+			Spectrum out = Spectrum{ 0.0f, 0.0f, 0.0f };
+			for (uint32_t s = 0; s < spp; ++s) {
+				out += color_at(x, y, s) * sample_pattern.centers_and_weights[s].z;
+			}
+			//std::cout << "Color out at (" + std::to_string(x) + ", " + std::to_string(y) + ") = (" + std::to_string(out.r) + ", " + std::to_string(out.g) + ", " + std::to_string(out.b) + ")\n";
+			image.at(x, y) = out;
 		}
 	}
 

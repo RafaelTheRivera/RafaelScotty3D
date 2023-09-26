@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+//#include <iostream>
 
 #include "../lib/spectrum.h"
 
@@ -32,7 +33,12 @@ struct Framebuffer {
 	uint32_t index(uint32_t x, uint32_t y, uint32_t s) const {
 		// A1T7: index
 		// TODO: update to provide different storage locations for different samples
-		return y * width + x;
+		//std::vector<Vec3> samples = sample_pattern.centers_and_weights;
+		//size_t spp = samples.size();
+		size_t spp = (colors.size() / height ) / width;
+		//std::cout << std::to_string(spp) + "samples index\n";
+
+		return (uint32_t)(y * spp * width + spp * x + s);
 	}
 
 	// helpers that look up colors and depths for sample s of pixel (x,y):

@@ -15,6 +15,7 @@ void Pipeline<primitive_type, Program, flags>::run(std::vector<Vertex> const& ve
 	// Framebuffer must be non-null:
 	assert(framebuffer_);
 	auto& framebuffer = *framebuffer_;
+	
 
 	// A1T7: sample loop
 	// TODO: update this function to rasterize to *all* sample locations in the framebuffer.
@@ -97,88 +98,122 @@ void Pipeline<primitive_type, Program, flags>::run(std::vector<Vertex> const& ve
 	auto emit_fragment = [&](Fragment const& f) { fragments.emplace_back(f); };
 
 	// actually do rasterization:
-	if constexpr (primitive_type == PrimitiveType::Lines) {
-		for (uint32_t i = 0; i + 1 < clipped_vertices.size(); i += 2) {
-			rasterize_line(clipped_vertices[i], clipped_vertices[i + 1], emit_fragment);
-		}
-	} else if constexpr (primitive_type == PrimitiveType::Triangles) {
-		for (uint32_t i = 0; i + 2 < clipped_vertices.size(); i += 3) {
-			rasterize_triangle(clipped_vertices[i], clipped_vertices[i + 1], clipped_vertices[i + 2], emit_fragment);
-		}
-	} else {
-		static_assert(primitive_type == PrimitiveType::Lines, "Unsupported primitive type.");
-	}
-
-	//--------------------------
-	// depth test + shade + blend fragments:
 	uint32_t out_of_range = 0; // check if rasterization produced fragments outside framebuffer 
-							   // (indicates something is wrong with clipping)
-	for (auto const& f : fragments) {
 
-		// fragment location (in pixels):
-		int32_t x = (int32_t)std::floor(f.fb_position.x);
-		int32_t y = (int32_t)std::floor(f.fb_position.y);
+	std::vector< Vec3 > const& samples = framebuffer.sample_pattern.centers_and_weights;
+	for (uint32_t s = 0; s < samples.size(); ++s)
+	{
+		float dx = samples[s].x - 0.5f;
+		float dy = samples[s].y - 0.5f;
 
-		// if clipping is working properly, this condition shouldn't be needed;
-		// however, it prevents crashes while you are working on your clipping functions,
-		// so we suggest leaving it in place:
-		if (x < 0 || (uint32_t)x >= framebuffer.width || 
-		    y < 0 || (uint32_t)y >= framebuffer.height) {
-			++out_of_range;
-			continue;
+
+		if constexpr (primitive_type == PrimitiveType::Lines) {
+			for (uint32_t i = 0; i + 1 < clipped_vertices.size(); i += 2) {
+				ClippedVertex coord1 = clipped_vertices[i];
+				coord1.fb_position.x += dx;
+				coord1.fb_position.y += dy;
+				ClippedVertex coord2 = clipped_vertices[i + 1];
+				coord2.fb_position.x += dx;
+				coord2.fb_position.y += dy;
+				rasterize_line(coord1, coord2, emit_fragment);
+			}
+		}
+		else if constexpr (primitive_type == PrimitiveType::Triangles) {
+			for (uint32_t i = 0; i + 2 < clipped_vertices.size(); i += 3) {
+				ClippedVertex coord1 = clipped_vertices[i];
+				coord1.fb_position.x += dx;
+				coord1.fb_position.y += dy;
+				ClippedVertex coord2 = clipped_vertices[i + 1];
+				coord2.fb_position.x += dx;
+				coord2.fb_position.y += dy;
+				ClippedVertex coord3 = clipped_vertices[i + 2];
+				coord3.fb_position.x += dx;
+				coord3.fb_position.y += dy;
+				rasterize_triangle(coord1, coord2, coord3, emit_fragment);
+			}
+		}
+		else {
+			static_assert(primitive_type == PrimitiveType::Lines, "Unsupported primitive type.");
 		}
 
-		// local names that refer to destination sample in framebuffer:
-		float& fb_depth = framebuffer.depth_at(x, y, 0);
-		Spectrum& fb_color = framebuffer.color_at(x, y, 0);
+		//--------------------------
+		// depth test + shade + blend fragments:
+		// (indicates something is wrong with clipping)
+		for (auto const& f : fragments) {
 
+			// fragment location (in pixels):
+			int32_t x = (int32_t)std::floor(f.fb_position.x);
+			int32_t y = (int32_t)std::floor(f.fb_position.y);
 
-		// depth test:
-		if constexpr ((flags & PipelineMask_Depth) == Pipeline_Depth_Always) {
-			// "Always" means the depth test always passes.
-		} else if constexpr ((flags & PipelineMask_Depth) == Pipeline_Depth_Never) {
-			// "Never" means the depth test never passes.
-			continue; //discard this fragment
-		} else if constexpr ((flags & PipelineMask_Depth) == Pipeline_Depth_Less) {
-			// "Less" means the depth test passes when the new fragment has depth less than the stored depth.
-			// A1T4: Depth_Less
-			// TODO: implement depth test! We want to only emit fragments that have a depth less than the stored depth, hence "Depth_Less".
-			if (f.fb_position.z >= fb_depth) {
+			// if clipping is working properly, this condition shouldn't be needed;
+			// however, it prevents crashes while you are working on your clipping functions,
+			// so we suggest leaving it in place:
+			if (x < 0 || (uint32_t)x >= framebuffer.width ||
+				y < 0 || (uint32_t)y >= framebuffer.height) {
+				++out_of_range;
 				continue;
 			}
-		} else {
-			static_assert((flags & PipelineMask_Depth) <= Pipeline_Depth_Always, "Unknown depth test flag.");
-		}
 
-		// if depth test passes, and depth writes aren't disabled, write depth to depth buffer:
-		if constexpr (!(flags & Pipeline_DepthWriteDisableBit)) {
-			fb_depth = f.fb_position.z;
-		}
+			// local names that refer to destination sample in framebuffer:
+			float& fb_depth = framebuffer.depth_at(x, y, s);
+			Spectrum& fb_color = framebuffer.color_at(x, y, s);
 
-		// shade fragment:
-		ShadedFragment sf;
-		sf.fb_position = f.fb_position;
-		Program::shade_fragment(parameters, f.attributes, f.derivatives, &sf.color, &sf.opacity);
 
-		// write color to framebuffer if color writes aren't disabled:
-		if constexpr (!(flags & Pipeline_ColorWriteDisableBit)) {
-			// blend fragment:
-			if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Replace) {
-				fb_color = sf.color;
-			} else if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Add) {
-				// A1T4: Blend_Add
-				// TODO: framebuffer color should have fragment color multiplied by fragment opacity added to it.
-				fb_color += sf.color*sf.opacity; 
-			} else if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Over) {
-				// A1T4: Blend_Over
-				// TODO: set framebuffer color to the result of "over" blending (also called "alpha blending") the fragment color over the framebuffer color, using the fragment's opacity
-				// 		 You may assume that the framebuffer color has its alpha premultiplied already, and you just want to compute the resulting composite color
-				fb_color = sf.color + (1.0f-sf.opacity) * fb_color; 
-			} else {
-				static_assert((flags & PipelineMask_Blend) <= Pipeline_Blend_Over, "Unknown blending flag.");
+			// depth test:
+			if constexpr ((flags & PipelineMask_Depth) == Pipeline_Depth_Always) {
+				// "Always" means the depth test always passes.
+			}
+			else if constexpr ((flags & PipelineMask_Depth) == Pipeline_Depth_Never) {
+				// "Never" means the depth test never passes.
+				continue; //discard this fragment
+			}
+			else if constexpr ((flags & PipelineMask_Depth) == Pipeline_Depth_Less) {
+				// "Less" means the depth test passes when the new fragment has depth less than the stored depth.
+				// A1T4: Depth_Less
+				// TODO: implement depth test! We want to only emit fragments that have a depth less than the stored depth, hence "Depth_Less".
+				if (f.fb_position.z >= fb_depth) {
+					continue;
+				}
+
+			}
+			else {
+				static_assert((flags & PipelineMask_Depth) <= Pipeline_Depth_Always, "Unknown depth test flag.");
+			}
+
+			// if depth test passes, and depth writes aren't disabled, write depth to depth buffer:
+			if constexpr (!(flags & Pipeline_DepthWriteDisableBit)) {
+				fb_depth = f.fb_position.z;
+			}
+
+			// shade fragment:
+			ShadedFragment sf;
+			sf.fb_position = f.fb_position;
+			Program::shade_fragment(parameters, f.attributes, f.derivatives, &sf.color, &sf.opacity);
+
+			// write color to framebuffer if color writes aren't disabled:
+			if constexpr (!(flags & Pipeline_ColorWriteDisableBit)) {
+				// blend fragment:
+				if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Replace) {
+					fb_color = sf.color;
+				}
+				else if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Add) {
+					// A1T4: Blend_Add
+					// TODO: framebuffer color should have fragment color multiplied by fragment opacity added to it.
+					fb_color += sf.color * sf.opacity;
+				}
+				else if constexpr ((flags & PipelineMask_Blend) == Pipeline_Blend_Over) {
+					// A1T4: Blend_Over
+					// TODO: set framebuffer color to the result of "over" blending (also called "alpha blending") the fragment color over the framebuffer color, using the fragment's opacity
+					// 		 You may assume that the framebuffer color has its alpha premultiplied already, and you just want to compute the resulting composite color
+					fb_color = sf.color + (1.0f - sf.opacity) * fb_color;
+				}
+				else {
+					static_assert((flags & PipelineMask_Blend) <= Pipeline_Blend_Over, "Unknown blending flag.");
+				}
 			}
 		}
 	}
+
 	if (out_of_range > 0) {
 		if constexpr (primitive_type == PrimitiveType::Lines) {
 			warn("Produced %d fragments outside framebuffer; this indicates something is likely "
@@ -570,98 +605,280 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 	//  same code paths. Be aware, however, that all of them need to remain working!
 	//  (e.g., if you break Flat while implementing Correct, you won't get points
 	//   for Flat.)
+
+
+	//vars I don't want to retype repeatedly
+	float ax = va.fb_position.x;
+	float ay = va.fb_position.y;
+	float bx = vb.fb_position.x;
+	float by = vb.fb_position.y;
+	float cx = vc.fb_position.x;
+	float cy = vc.fb_position.y;
+	float az = va.fb_position.z;
+	float bz = vb.fb_position.z;
+	float cz = vc.fb_position.z;
+
+	float xMin = std::min(ax, std::min(bx, cx));
+	float xMax = std::max(ax, std::max(bx, cx));
+	float yMin = std::min(ay, std::min(by, cy));
+	float yMax = std::max(ay, std::max(by, cy));
+
+	//lambda functions I don't want to retype repeatedly
+	auto det = [=](float x1, float y1, float x2, float y2) {
+		return ((x1 * y2) - (y1 * x2));
+		};
+	
+
+	auto getBary = [=, &ax, &bx, &cx, &ay, &by, &cy](float qx, float qy, float aa, float ba, float ca) {
+		//float a = std::abs((0.5f * (ax*(by - cy) + bx*(ay - cy) + cx*(ay - by))));
+		float d = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy));
+
+		float x = (((by - cy) * (qx - cx)) + ((cx - bx) * (qy - cy))) / d;
+		float y = (((cy - ay) * (qx - cx)) + ((ax - cx) * (qy - cy))) / d;
+		float z = 1.0f - x - y;
+		return (aa * x + ba * y + ca * z);
+		};
+
+	auto pointInTriangle = [&](float qx, float qy) {
+		if (qx > xMax || qx < xMin || qy > yMax || qy < yMin) {
+			return false;
+		}
+
+		//std::cout << "Checking point (" + std::to_string(qx) + ", " + std::to_string(qy) + ") \n";
+		float d = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy));
+		// I want the x and y barymetrics as well.
+		float baryx = (((by - cy) * (qx - cx)) + ((cx - bx) * (qy - cy))) / d;
+		float baryy = (((cy - ay) * (qx - cx)) + ((ax - cx) * (qy - cy))) / d; 
+		float baryz = 1.0f - baryx - baryy;
+		//std::cout << "BaryX = " + std::to_string(baryx) + ", BaryY = " + std::to_string(baryy) + ", BaryZ = " + std::to_string(baryz) + ". \n";
+
+
+		if (baryx < 0.0f || baryy < 0.0f || baryz < 0.0f) {
+			return false;
+		}
+		if (baryx > 0.0f && baryy > 0.0f && baryz > 0.0f) {
+			return true;
+		}
+		
+		// baryx (representing a) == 0 means it lies on bc, baryy == 0 -> lies on ac, baryz == 0 -> lies on ab
+
+		bool isCCW = (((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) > 0.0f); // rotation of a->b->c
+
+		if (isCCW) {
+			if (baryy == 0.0f && ((cy > ay) || (cy == ay && (cy > by)))) {
+				//std::cout << "CCW Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) + "; By = " + std::to_string(by) + ". \n";
+				return true;
+			}
+			if (baryx == 0.0f && ((by > cy) || (cy == by && (cy > ay)))) {
+				//std::cout << "CCW By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) +  ". \n";
+				return true;
+			}
+			if (baryz == 0.0f && ((ay > by) || (by == ay && (ay > cy)))) {
+				//std::cout << "CCW Ay = " + std::to_string(ay) + "; By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + ". \n";
+				return true;
+			}
+		}
+		else {
+			if (baryy == 0.0f && ((cy < ay) || (cy == ay && (cy > by)))) {
+				//std::cout << "CW Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) + "; By = " + std::to_string(by) + ". \n";
+				return true;
+			}
+			if (baryx == 0.0f && ((by < cy) || (cy == by && (cy > ay)))) {
+				//std::cout << "CW By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) + ". \n";
+				return true;
+			}
+			if (baryz == 0.0f && ((ay < by) || (by == ay && (ay > cy)))) {
+				//std::cout << "CW Ay = " + std::to_string(ay) + "; By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + ". \n";
+				return true;
+			}
+		}
+		return false;
+		// float dot1, dot2, dot3;
+		/*if (isCW) {
+			// CW Calc
+			//std::cout << "CW\n";
+			// dot1 = det(cx - ax, cy - ay, bx - ax, by - ay) * det(cx - ax, cy - ay, qx - ax, qy - ay); //ac
+			// dot2 = det(bx - cx, by - cy, ax - cx, ay - cy) * det(bx - cx, by - cy, qx - cx, qy - cy); //cb
+			// dot3 = det(ax - bx, ay - by, cx - bx, cy - by) * det(ax - bx, ay - by, qx - bx, qy - by); //ba
+			if (dot1 > 0.0f && dot2 > 0.0f && dot3 > 0.0f) { return true; } //at exact edge, one of these will be 0.0f
+			if (dot1 == 0.0f && ((cy > ay) || (cy == ay && (cy > by)))) {
+				//std::cout << "CW Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) + "; By = " + std::to_string(by) + ". \n";
+				return true;
+			}
+			if (dot2 == 0.0f && ((by > cy) || (cy == by && (cy > ay)))) {
+				//std::cout << "CW By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) +  ". \n";
+				return true;
+			}
+			if (dot3 == 0.0f && ((ay > by) || (by == ay && (ay > cy)))) {
+				//std::cout << "CW Ay = " + std::to_string(ay) + "; By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + ". \n";
+				return true;
+			}
+			return false;
+		}
+		else {
+			// CCW calc
+			//std::cout << "CCW\n";
+			dot1 = det(bx - ax, by - ay, cx - ax, cy - ay) * det(cx - ax, cy - ay, qx - ax, qy - ay); //ac
+			dot2 = det(ax - cx, ay - cy, bx - cx, by - cy) * det(bx - cx, by - cy, qx - cx, qy - cy); //cb
+			dot3 = det(cx - bx, cy - by, ax - bx, ay - by) * det(ax - bx, ay - by, qx - bx, qy - by); //ba
+			if (dot1 < 0.0f && dot2 < 0.0f && dot3 < 0.0f) { return true; }
+			if (dot1 == 0.0f && ((cy < ay) || (cy == ay && (cy > by)))) {
+				//std::cout << "CCW Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) + "; By = " + std::to_string(by) + ". \n";
+				return true;
+			}
+			if (dot2 == 0.0f && ((by < cy) || (cy == by && (cy > ay)))) {
+				//std::cout << "CCW By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) + ". \n";
+				return true;
+			}
+			if (dot3 == 0.0f && ((ay < by) || (by == ay && (ay > cy)))) {
+				//std::cout << "CCW Ay = " + std::to_string(ay) + "; By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + ". \n";
+				return true;
+			}
+			return false;
+		}*/
+		};
+
+	auto intersectsOver = [&](float q, float start, float end, bool isLR) {
+		int bound = ((int)end) - ((int)start) + 1;
+		if (isLR) {
+			for (int e = 0; e < bound; e++) {
+				if (pointInTriangle(q + 0.5f, start + (float)e + 0.5f)) {
+					return true;
+				}
+			}
+		}
+		else {
+			for (int e = 0; e < bound; e++) {
+				if (pointInTriangle(start + (float)e + 0.5f, q + 0.5f)) {
+					return true;
+				}
+			}
+		}
+		return false;
+		};
+
+	auto getZ = [=, &ax, &bx, &cx, &ay, &by, &cy, &az, &bz, &cz](float qx, float qy) {
+		//float a = std::abs((0.5f * (ax*(by - cy) + bx*(ay - cy) + cx*(ay - by))));
+		float d = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy));
+
+		float x = (((by - cy) * (qx - cx)) + ((cx - bx) * (qy - cy))) / d;
+		float y = (((cy - ay) * (qx - cx)) + ((ax - cx) * (qy - cy))) / d;
+		float z = 1.0f - x - y;
+		return (az * x + bz * y + cz * z);
+		};
+	auto getBaryInterp = [&](float qx, float qy, float aa, float ba, float ca, float aw, float bw, float cw) {
+		float d = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy));
+		float baryx = (((by - cy) * (qx - cx)) + ((cx - bx) * (qy - cy))) / d;
+		float baryy = (((cy - ay) * (qx - cx)) + ((ax - cx) * (qy - cy))) / d;
+		float baryz = 1.0f - baryx - baryy;
+		float phiw = baryx * aa * aw + baryy * ba * bw + baryz * ca * cw;
+		float intw = baryx * aw + baryy * bw + baryz * cw;
+		if (intw == 0.0f) {
+			if (phiw == 0.0f) {
+				return 0.0f;
+			}
+			else {
+				return std::numeric_limits<float>::max(); // divide by 0 case
+			}
+		}
+		else {
+			return phiw / intw;
+		}
+		};
+
 	if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Flat) {
 		// A1T3: flat triangles
 		// TODO: rasterize triangle (see block comment above this function).
 
-		float ax = va.fb_position.x;
-		float ay = va.fb_position.y;
-		float bx = vb.fb_position.x;
-		float by = vb.fb_position.y;
-		float cx = vc.fb_position.x;
-		float cy = vc.fb_position.y;
-		float az = va.fb_position.z;
-		float bz = vb.fb_position.z;
-		float cz = vc.fb_position.z;
 
 		//this gives bounds for raster
-		float xMin = std::min(ax, std::min(bx, cx));
-		float xMax = std::max(ax, std::max(bx, cx));
-		float yMin = std::min(ay, std::min(by, cy));
-		float yMax = std::max(ay, std::max(by, cy));
 		
-		auto det = [=](float ax, float ay, float bx, float by) {
-			return ((ax * by) - (ay * bx));
-		};
 
 		
-		auto pointInTriangle = [=, &ax, &bx, &cx, &ay, &by, &cy](float qx, float qy) {
-			bool isCW = (((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) > 0.0f); // CW for a->c->b = CCW for a->b->c
-			float dot1, dot2, dot3;
-			if (isCW) {
-				// CW Calc
-				//std::cout << "CW\n";
-				dot1 = det(cx - ax, cy - ay, bx - ax, by - ay) * det(cx - ax, cy - ay, qx - ax, qy - ay); //ac
-				dot2 = det(bx - cx, by - cy, ax - cx, ay - cy) * det(bx - cx, by - cy, qx - cx, qy - cy); //cb
-				dot3 = det(ax - bx, ay - by, cx - bx, cy - by) * det(ax - bx, ay - by, qx - bx, qy - by); //ba
-				//std::cout << "For point (" + std::to_string(qx) + ", " + std::to_string(qy) + "):\n";
-				//std::cout << "dot1: " + std::to_string(dot1) + "; dot2: " + std::to_string(dot2) + "; dot3: " + std::to_string(dot3) + "\n";
-				if (dot1 > 0.0f && dot2 > 0.0f && dot3 > 0.0f) { return true; } //at exact edge, one of these will be 0.0f
-				if (dot1 == 0.0f && ((cy > ay) || (cy==ay && (cy > by)))) { //I think this is necessary to account for floating point precision errors?
-					return true;
+		//int clen = (int)(ceil(xMax) - floor(xMin));
+		//int rlen = (int)(ceil(yMax) - floor(yMin));
+
+
+		auto checkFrom = [&](float xbl, float ybl, float xtr, float ytr, auto&& checkFrom) {
+			int width = (int)(floor(xtr) - floor(xbl)) + 1;
+			int height = (int)(floor(ytr) - floor(ybl)) + 1;
+			if (width == 1 && height == 1) 
+			{
+				if (pointInTriangle(xbl + 0.5f, ybl + 0.5f)) {
+					Fragment out;
+					out.fb_position.x = xbl + 0.5f;
+					out.fb_position.y = ybl + 0.5f;
+					out.fb_position.z = getZ(out.fb_position.x, out.fb_position.y);
+					//std::cout << "(" + std::to_string(out.fb_position.x) + ", " + std::to_string(out.fb_position.y) + ") got through from individual check.\n";
+					out.attributes = va.attributes;
+					out.derivatives.fill(Vec2(0.0f, 0.0f));
+					emit_fragment(out);
 				}
-				if (dot2 == 0.0f && ((by > cy) || (cy == by && (cy > ay)))) {
-					std::cout << "By = " + std::to_string(by) + "; Cy = " + std::to_string(cy) + "; Ay = " + std::to_string(ay) +  ". \n";
-					return true;
+				/*else
+				{
+					//std::cout << "(" + std::to_string(xbl + 0.5f) + ", " + std::to_string(ybl + 0.5f) + ") got rejected by individual check.\n";
+				}*/
+				return 1;
+			} 
+			//std::cout << "Checking (" + std::to_string(xbl) + ", " + std::to_string(ybl) + "), (" + std::to_string(xtr) + ", " + std::to_string(ytr) + ")";
+			bool inbl = pointInTriangle(xbl + 0.5f, ybl + 0.5f);
+			bool inbr = pointInTriangle(xtr + 0.5f, ybl + 0.5f);
+			bool intl = pointInTriangle(xbl + 0.5f, ytr + 0.5f);
+			bool intr = pointInTriangle(xtr + 0.5f, ytr + 0.5f);
+			if (intl && intr && inbl && inbr) {
+				//std::cout << "; Full\n";
+				for (int ri = 0; ri < height; ri++) {
+					for (int ci = 0; ci < width; ci++) {
+						Fragment out;
+						out.fb_position.x = (float)ci + xbl + 0.5f;
+						out.fb_position.y = (float)ri + ybl + 0.5f;
+						//std::cout << "(" + std::to_string(out.fb_position.x) + ", " + std::to_string(out.fb_position.y) + ") got through from early-in.\n";
+						out.fb_position.z = getZ(out.fb_position.x, out.fb_position.y);
+						out.attributes = va.attributes;
+						out.derivatives.fill(Vec2(0.0f, 0.0f));
+						emit_fragment(out);
+					}
 				}
-				if (dot3 == 0.0f && ((ay > by) || (by == ay && (ay > cy)))) {
-					return true;
-				}
-				return false;
+				return 1;
 			}
-			else {
-				// CCW calc
-				//std::cout << "CCW\n";
-				dot1 = det(bx - ax, by - ay, cx - ax, cy - ay) * det(cx - ax, cy - ay, qx - ax, qy - ay); //ac
-				dot2 = det(ax - cx, ay - cy, bx - cx, by - cy) * det(bx - cx, by - cy, qx - cx, qy - cy); //cb
-				dot3 = det(cx - bx, cy - by, ax - bx, ay - by) * det(ax - bx, ay - by, qx - bx, qy - by); //ba
-				if (dot1 < 0.0f && dot2 < 0.0f && dot3 < 0.0f) { return true; }
-				if (dot1 == 0.0f && ((cy < ay) || (cy == ay && (cy > by)))) {
-					return true;
+			if (intersectsOver(xbl, ybl, ytr, true) || intersectsOver(xtr, ybl, ytr, true) || intersectsOver(ybl, xbl, xtr, false) || intersectsOver(ytr, xbl, xtr, false)) {
+				//std::cout << "; Mixed\n";
+				if (width == 1) {
+					for (int ci = 0; ci < height; ci++) {
+						checkFrom(xbl, ybl + ci, xbl, ybl + ci, checkFrom);
+					}
+					return 1;
 				}
-				if (dot2 == 0.0f && ((by < cy) || (cy == by && (cy > ay)))) {
-					return true;
+				if (height == 1) {
+					for (int ri = 0; ri < width; ri++) {
+						checkFrom(xbl+ri, ybl, xbl+ ri, ybl, checkFrom);
+					}
+					return 1;
 				}
-				if (dot3 == 0.0f && ((ay < by) || (by == ay && (ay > cy)))) {
-					return true;
-				}
-				return false;
+				checkFrom(xbl, ybl, xbl + (float)(width / 2 - 1), ybl + (float)(height / 2 - 1), checkFrom); // bl
+				checkFrom(xbl + (float)(width / 2), ybl, xtr, ybl + (float)(height / 2 - 1), checkFrom); // br
+				checkFrom(xbl, ybl + (float)(height/2), xbl + (float)(width / 2 - 1), ytr, checkFrom); // tl
+				checkFrom(xbl + (float)(width / 2), ybl + (float)(height / 2), xtr, ytr, checkFrom); // tr
+				return 1;
 			}
+			//std::cout << "; Empty\n";
+			return 0;
 		};
 
-		auto getZ = [=, &ax, &bx, &cx, &ay, &by, &cy, &az, &bz, &cz](float qx, float qy) {
-			//float a = std::abs((0.5f * (ax*(by - cy) + bx*(ay - cy) + cx*(ay - by))));
-			float d = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy));
+		//Skip first check because it can be annoying
+		auto startFun = [&](float xbl, float ybl, float xtr, float ytr, auto&& checkFrom) {
+			int width = (int)(floor(xtr) - floor(xbl)) + 1;
+			int height = (int)(floor(ytr) - floor(ybl)) + 1;
+			checkFrom(xbl, ybl, xbl + (float)(width / 2 - 1), ybl + (float)(height / 2 - 1), checkFrom); // bl
+			checkFrom(xbl + (float)(width / 2), ybl, xtr, ybl + (float)(height / 2 - 1), checkFrom); // br
+			checkFrom(xbl, ybl + (float)(height / 2), xbl + (float)(width / 2 - 1), ytr, checkFrom); // tl
+			checkFrom(xbl + (float)(width / 2), ybl + (float)(height / 2), xtr, ytr, checkFrom);
+			};
 
-			float x = (((by - cy) * (qx - cx)) + ((cx - bx) * (qy - cy))) / d;
-			float y = (((cy - ay) * (qx - cx)) + ((ax - cx) * (qy - cy))) / d;
-			float z = 1.0f - x - y;
-			/*float a = areaTri(ax, ay, az, bx, by, bz, cx, cy, cz);
-			std::cout << "Total area: " + std::to_string(a) + " for (" + std::to_string(ax) + ", " + std::to_string(ay) + ", " + std::to_string(az) 
-							+ "), (" + std::to_string(bx) + ", " + std::to_string(by) + ", " + std::to_string(bz) + "), (" 
-							+ std::to_string(cx) + ", " + std::to_string(cy) + ", " + std::to_string(cz) + "): point = (" + std::to_string(qx) + ", " + std::to_string(qy) + ")\n";
-			float baryA = areaTri(qx, qy, az, bx, by, bz, cx, cy, cz) /a;
-			float baryB = (std::abs((0.5f * (ax*(qy - cy) + qx*(ay - cy) + cx*(ay - qy)))))/a;
-			float baryC = (1-baryA)-baryB;*/
-			//std::cout << "Bary for this point: " + std::to_string(az * baryA + bz * baryB + cz * baryC) + "\n";
-			return (az*x + bz*y + cz*z);
-		};
-
-		int clen = (int)(ceil(xMax) - floor(xMin));
-		int rlen = (int)(ceil(yMax) - floor(yMin));
-
+		startFun(floor(xMin), floor(yMin), floor(xMax), floor(yMax), checkFrom);
+		
 		//std::cout << "Checking " + std::to_string(rlen) + " rows and " + std::to_string(clen) + " cols\n";
-		for (int ri = 0; ri < rlen; ri++) {
+		/*for (int ri = 0; ri < rlen; ri++) {
 			for (int ci = 0; ci < clen; ci++) {
 				if (pointInTriangle((float)ci + floor(xMin) + 0.5f, ((float)ri + floor(yMin)) + 0.5f)) {
 					Fragment out;
@@ -675,25 +892,250 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 					emit_fragment(out);
 				}
 			}
-		}
+		}*/
 		/*
 		Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(va, vb, emit_fragment);
 		Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(vb, vc, emit_fragment);
 		Pipeline<PrimitiveType::Lines, P, flags>::rasterize_line(vc, va, emit_fragment);*/
-	} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Smooth) {
+	}
+	else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Smooth) {
 		// A1T5: screen-space smooth triangles
 		// TODO: rasterize triangle (see block comment above this function).
+		
+		auto checkFrom = [&](float xbl, float ybl, float xtr, float ytr, auto&& checkFrom) {
+			int width = (int)(floor(xtr) - floor(xbl)) + 1;
+			int height = (int)(floor(ytr) - floor(ybl)) + 1;
+			if (width == 1 && height == 1)
+			{
+				if (pointInTriangle(xbl + 0.5f, ybl + 0.5f)) {
+					Fragment out;
+					out.fb_position.x = xbl + 0.5f;
+					out.fb_position.y = ybl + 0.5f;
+					out.fb_position.z = getZ(out.fb_position.x, out.fb_position.y);
+					for (int attr = 0; attr < va.attributes.size(); attr++) {
+						out.attributes[attr] = getBary(out.fb_position.x, out.fb_position.y, va.attributes[attr], vb.attributes[attr], vc.attributes[attr]);
+					}
+					float ux = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[0], vb.attributes[0], vc.attributes[0]);
+					float uy = getBary(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[0], vb.attributes[0], vc.attributes[0]);
+					float vx = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[1], vb.attributes[1], vc.attributes[1]);
+					float vy = getBary(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[1], vb.attributes[1], vc.attributes[1]);
+					out.derivatives[0] = Vec2(ux - out.attributes[0], uy - out.attributes[0]);
+					out.derivatives[1] = Vec2(vx - out.attributes[1], vy - out.attributes[1]);
+					emit_fragment(out);
+				}
 
+				return 1;
+			}
+			//std::cout << "Checking (" + std::to_string(xbl) + ", " + std::to_string(ybl) + "), (" + std::to_string(xtr) + ", " + std::to_string(ytr) + ")";
+			bool inbl = pointInTriangle(xbl + 0.5f, ybl + 0.5f);
+			bool inbr = pointInTriangle(xtr + 0.5f, ybl + 0.5f);
+			bool intl = pointInTriangle(xbl + 0.5f, ytr + 0.5f);
+			bool intr = pointInTriangle(xtr + 0.5f, ytr + 0.5f);
+			if (intl && intr && inbl && inbr) {
+				//std::cout << "; Full\n";
+				for (int ri = 0; ri < height; ri++) {
+					for (int ci = 0; ci < width; ci++) {
+						Fragment out;
+						out.fb_position.x = (float)ci + xbl + 0.5f;
+						out.fb_position.y = (float)ri + ybl + 0.5f;
+						out.fb_position.z = getZ(out.fb_position.x, out.fb_position.y);
+						for (int attr = 0; attr < va.attributes.size(); attr++) {
+							out.attributes[attr] = getBary(out.fb_position.x, out.fb_position.y, va.attributes[attr], vb.attributes[attr], vc.attributes[attr]);
+						}
+						float ux = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[0], vb.attributes[0], vc.attributes[0]);
+						float uy = getBary(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[0], vb.attributes[0], vc.attributes[0]);
+						float vx = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[1], vb.attributes[1], vc.attributes[1]);
+						float vy = getBary(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[1], vb.attributes[1], vc.attributes[1]);
+						out.derivatives[0] = Vec2(ux - out.attributes[0], uy - out.attributes[0]);
+						out.derivatives[1] = Vec2(vx - out.attributes[1], vy - out.attributes[1]);
+						emit_fragment(out);
+					}
+				}
+				return 1;
+			}
+			if (intersectsOver(xbl, ybl, ytr, true) || intersectsOver(xtr, ybl, ytr, true) || intersectsOver(ybl, xbl, xtr, false) || intersectsOver(ytr, xbl, xtr, false)) {
+				//std::cout << "; Mixed\n";
+				if (width == 1) {
+					for (int ci = 0; ci < height; ci++) {
+						checkFrom(xbl, ybl + ci, xbl, ybl + ci, checkFrom);
+					}
+					return 1;
+				}
+				if (height == 1) {
+					for (int ri = 0; ri < width; ri++) {
+						checkFrom(xbl + ri, ybl, xbl + ri, ybl, checkFrom);
+					}
+					return 1;
+				}
+				checkFrom(xbl, ybl, xbl + (float)(width / 2 - 1), ybl + (float)(height / 2 - 1), checkFrom); // bl
+				checkFrom(xbl + (float)(width / 2), ybl, xtr, ybl + (float)(height / 2 - 1), checkFrom); // br
+				checkFrom(xbl, ybl + (float)(height / 2), xbl + (float)(width / 2 - 1), ytr, checkFrom); // tl
+				checkFrom(xbl + (float)(width / 2), ybl + (float)(height / 2), xtr, ytr, checkFrom); // tr
+				return 1;
+			}
+			//std::cout << "; Empty\n";
+			return 0;
+			};
+
+		//Skip first check because it can be annoying
+		auto startTri = [&](float xbl, float ybl, float xtr, float ytr, auto&& checkFrom) {
+			int width = (int)(floor(xtr) - floor(xbl)) + 1;
+			int height = (int)(floor(ytr) - floor(ybl)) + 1;
+			checkFrom(xbl, ybl, xbl + (float)(width / 2 - 1), ybl + (float)(height / 2 - 1), checkFrom); // bl
+			checkFrom(xbl + (float)(width / 2), ybl, xtr, ybl + (float)(height / 2 - 1), checkFrom); // br
+			checkFrom(xbl, ybl + (float)(height / 2), xbl + (float)(width / 2 - 1), ytr, checkFrom); // tl
+			checkFrom(xbl + (float)(width / 2), ybl + (float)(height / 2), xtr, ytr, checkFrom);
+			};
+
+		startTri(floor(xMin), floor(yMin), floor(xMax), floor(yMax), checkFrom);
 		// As a placeholder, here's code that calls the Flat interpolation version of the function:
 		//(remove this and replace it with a real solution)
-		Pipeline<PrimitiveType::Lines, P, (flags & ~PipelineMask_Interp) | Pipeline_Interp_Flat>::rasterize_triangle(va, vb, vc, emit_fragment);
+		// Pipeline<PrimitiveType::Lines, P, (flags & ~PipelineMask_Interp) | Pipeline_Interp_Flat>::rasterize_triangle(va, vb, vc, emit_fragment);
 	} else if constexpr ((flags & PipelineMask_Interp) == Pipeline_Interp_Correct) {
 		// A1T5: perspective correct triangles
 		// TODO: rasterize triangle (block comment above this function).
+		
 
+		auto checkFrom = [&](float xbl, float ybl, float xtr, float ytr, auto&& checkFrom) {
+			int width = (int)(floor(xtr) - floor(xbl)) + 1;
+			int height = (int)(floor(ytr) - floor(ybl)) + 1;
+			if (width == 1 && height == 1)
+			{
+				float d = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy));
+				float baryx, baryy, baryz, phiw, intw;
+			
+				if (pointInTriangle(xbl + 0.5f, ybl + 0.5f)) {
+					Fragment out;
+					out.fb_position.x = xbl + 0.5f;
+					out.fb_position.y = ybl + 0.5f;
+					out.fb_position.z = getBary(out.fb_position.x, out.fb_position.y, az, bz, cz);
+					for (int attr = 0; attr < va.attributes.size(); attr++) {
+						baryx = (((by - cy) * (out.fb_position.x - cx)) + ((cx - bx) * (out.fb_position.y - cy))) / d;
+						baryy = (((cy - ay) * (out.fb_position.x - cx)) + ((ax - cx) * (out.fb_position.y - cy))) / d;
+						baryz = 1.0f - baryx - baryy;
+						phiw = baryx * va.attributes[attr] * va.inv_w + baryy * vb.attributes[attr] * vb.inv_w + baryz * vc.attributes[attr] * vc.inv_w;
+						intw = baryx * va.inv_w + baryy * vb.inv_w + baryz * vc.inv_w;
+						if (intw == 0.0f) {
+							out.attributes[attr] = std::numeric_limits<float>::max(); // divide by 0 case
+						}
+						else {
+							out.attributes[attr] = phiw / intw;
+						}
+					}
+					/*float ux = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[0], vb.attributes[0], vc.attributes[0]);
+					float uy = getBary(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[0], vb.attributes[0], vc.attributes[0]);
+					float vx = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[1], vb.attributes[1], vc.attributes[1]);
+					float vy = getBary(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[1], vb.attributes[1], vc.attributes[1]);*/
+					float ux = getBaryInterp(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[0], vb.attributes[0], vc.attributes[0], va.inv_w, vb.inv_w, vc.inv_w);
+					float uy = getBaryInterp(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[0], vb.attributes[0], vc.attributes[0], va.inv_w, vb.inv_w, vc.inv_w);
+					float vx = getBaryInterp(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[1], vb.attributes[1], vc.attributes[1], va.inv_w, vb.inv_w, vc.inv_w);
+					float vy = getBaryInterp(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[1], vb.attributes[1], vc.attributes[1], va.inv_w, vb.inv_w, vc.inv_w);
+					
+					/*float uMax = std::max(va.attributes[0], std::max(vb.attributes[0], vc.attributes[0]));
+					float uMin = std::min(va.attributes[0], std::min(vb.attributes[0], vc.attributes[0]));
+					float vMax = std::max(va.attributes[1], std::max(vb.attributes[1], vc.attributes[1]));
+					float vMin = std::min(va.attributes[1], std::min(vb.attributes[1], vc.attributes[1]));*/
+					out.derivatives[0] = Vec2((ux - out.attributes[0]), 
+											  (uy - out.attributes[0]));
+					out.derivatives[1] = Vec2((vx - out.attributes[1]), 
+											  (vy - out.attributes[1]));
+					// std::cout << "O1 = " + std::to_string(out.attributes[0]) + "; O2 = " + std::to_string(out.attributes[1]) + "\n";
+					// std::cout << "ux " + std::to_string(ux) + " uy " + std::to_string(uy) + " vx " + std::to_string(vx) + " vy " + std::to_string(vy) + "\n";
+					// std::cout << "D1 = " + std::to_string(out.derivatives[0].x) + ", " + std::to_string(out.derivatives[0].y) + "; D2 = " + std::to_string(out.derivatives[1].x) + ", " + std::to_string(out.derivatives[1].y) + "\n";
+					emit_fragment(out);
+				}
+
+				return 1;
+			}
+			//std::cout << "Checking (" + std::to_string(xbl) + ", " + std::to_string(ybl) + "), (" + std::to_string(xtr) + ", " + std::to_string(ytr) + ")";
+			bool inbl = pointInTriangle(xbl + 0.5f, ybl + 0.5f);
+			bool inbr = pointInTriangle(xtr + 0.5f, ybl + 0.5f);
+			bool intl = pointInTriangle(xbl + 0.5f, ytr + 0.5f);
+			bool intr = pointInTriangle(xtr + 0.5f, ytr + 0.5f);
+			if (intl && intr && inbl && inbr) {
+				//std::cout << "; Full\n";
+				float d = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy)); 
+				float baryx, baryy, baryz, phiw, intw; // Helper lambda assumes you only want interp
+				for (int ri = 0; ri < height; ri++) {
+					for (int ci = 0; ci < width; ci++) {
+						Fragment out;
+						out.fb_position.x = (float)ci + xbl + 0.5f;
+						out.fb_position.y = (float)ri + ybl + 0.5f;
+						out.fb_position.z = getZ(out.fb_position.x, out.fb_position.y);
+						for (int attr = 0; attr < va.attributes.size(); attr++) {
+							baryx = (((by - cy) * (out.fb_position.x - cx)) + ((cx - bx) * (out.fb_position.y - cy))) / d;
+							baryy = (((cy - ay) * (out.fb_position.x - cx)) + ((ax - cx) * (out.fb_position.y - cy))) / d;
+							baryz = 1.0f - baryx - baryy;
+						    phiw = baryx * va.attributes[attr] * va.inv_w + baryy * vb.attributes[attr] * vb.inv_w + baryz * vc.attributes[attr] * vc.inv_w;
+							intw = baryx * va.inv_w + baryy * vb.inv_w + baryz * vc.inv_w;
+							if (intw == 0.0f) {
+								if (phiw == 0.0f) {
+									out.attributes[attr] = 0.0f;
+								}
+								else {
+									out.attributes[attr] = std::numeric_limits<float>::max(); // divide by 0 case
+								}
+							}
+							else {
+								out.attributes[attr] = phiw/intw;
+							}
+						}
+						/*float ux = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[0], vb.attributes[0], vc.attributes[0]);
+						float uy = getBary(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[0], vb.attributes[0], vc.attributes[0]);
+						float vx = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[1], vb.attributes[1], vc.attributes[1]);
+						float vy = getBary(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[1], vb.attributes[1], vc.attributes[1]);*/
+						float ux = getBaryInterp(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[0], vb.attributes[0], vc.attributes[0], va.inv_w, vb.inv_w, vc.inv_w);
+						float uy = getBaryInterp(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[0], vb.attributes[0], vc.attributes[0], va.inv_w, vb.inv_w, vc.inv_w);
+						float vx = getBaryInterp(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[1], vb.attributes[1], vc.attributes[1], va.inv_w, vb.inv_w, vc.inv_w);
+						float vy = getBaryInterp(out.fb_position.x, out.fb_position.y + 1.0f, va.attributes[1], vb.attributes[1], vc.attributes[1], va.inv_w, vb.inv_w, vc.inv_w);
+						out.derivatives[0] = Vec2(ux - out.attributes[0], uy - out.attributes[0]);
+						out.derivatives[1] = Vec2(vx - out.attributes[1], vy - out.attributes[1]);
+						// std::cout << "O1 = " + std::to_string(out.attributes[0]) + "; O2 = " + std::to_string(out.attributes[1]) + "\n";
+						// std::cout << "ux " + std::to_string(ux) + " uy " + std::to_string(uy) + " vx " + std::to_string(vx) + " vy " + std::to_string(vy) + "\n";
+						// std::cout << "D1 = " + std::to_string(out.derivatives[0].x) + ", " + std::to_string(out.derivatives[0].y) + "; D2 = " + std::to_string(out.derivatives[1].x) + ", " + std::to_string(out.derivatives[1].y) + "\n";
+						emit_fragment(out);
+					}
+				}
+				return 1;
+			}
+			if (intersectsOver(xbl, ybl, ytr, true) || intersectsOver(xtr, ybl, ytr, true) || intersectsOver(ybl, xbl, xtr, false) || intersectsOver(ytr, xbl, xtr, false)) {
+				//std::cout << "; Mixed\n";
+				if (width == 1) {
+					for (int ci = 0; ci < height; ci++) {
+						checkFrom(xbl, ybl + ci, xbl, ybl + ci, checkFrom);
+					}
+					return 1;
+				}
+				if (height == 1) {
+					for (int ri = 0; ri < width; ri++) {
+						checkFrom(xbl + ri, ybl, xbl + ri, ybl, checkFrom);
+					}
+					return 1;
+				}
+				checkFrom(xbl, ybl, xbl + (float)(width / 2 - 1), ybl + (float)(height / 2 - 1), checkFrom); // bl
+				checkFrom(xbl + (float)(width / 2), ybl, xtr, ybl + (float)(height / 2 - 1), checkFrom); // br
+				checkFrom(xbl, ybl + (float)(height / 2), xbl + (float)(width / 2 - 1), ytr, checkFrom); // tl
+				checkFrom(xbl + (float)(width / 2), ybl + (float)(height / 2), xtr, ytr, checkFrom); // tr
+				return 1;
+			}
+			//std::cout << "; Empty\n";
+			return 0;
+			};
+
+		//Skip first check because it can be annoying
+		auto startTri = [&](float xbl, float ybl, float xtr, float ytr, auto&& checkFrom) {
+			int width = (int)(floor(xtr) - floor(xbl)) + 1;
+			int height = (int)(floor(ytr) - floor(ybl)) + 1;
+			checkFrom(xbl, ybl, xbl + (float)(width / 2 - 1), ybl + (float)(height / 2 - 1), checkFrom); // bl
+			checkFrom(xbl + (float)(width / 2), ybl, xtr, ybl + (float)(height / 2 - 1), checkFrom); // br
+			checkFrom(xbl, ybl + (float)(height / 2), xbl + (float)(width / 2 - 1), ytr, checkFrom); // tl
+			checkFrom(xbl + (float)(width / 2), ybl + (float)(height / 2), xtr, ytr, checkFrom);
+			};
+
+		startTri(floor(xMin), floor(yMin), floor(xMax), floor(yMax), checkFrom);
 		// As a placeholder, here's code that calls the Screen-space interpolation function:
 		//(remove this and replace it with a real solution)
-		Pipeline<PrimitiveType::Lines, P, (flags & ~PipelineMask_Interp) | Pipeline_Interp_Smooth>::rasterize_triangle(va, vb, vc, emit_fragment);
+		// Pipeline<PrimitiveType::Lines, P, (flags & ~PipelineMask_Interp) | Pipeline_Interp_Smooth>::rasterize_triangle(va, vb, vc, emit_fragment);
 	}
 }
 

@@ -7,6 +7,7 @@
 
 #include "../lib/mathlib.h"
 #include "../scene/texture.h"
+#include <iostream>
 
 namespace Programs {
 
@@ -122,8 +123,19 @@ struct Lambertian {
 		//  --> 'lod' is \lambda_base from equation (3.17)
 		// reading onward, you will discover that \rho can be computed in a number of ways
 		//  it is up to you to select one that makes sense in this context
-
-		float lod = 0.0f; //<-- replace this line
+		//float mod = 10.0f;
+		//std::cout << "width, height = " + std::to_string(wh.x) + " " + std::to_string(wh.y) + " \n";
+		Vec2 fdxts{ wh.x * fdx_texcoord.x, wh.x * fdx_texcoord.y };
+		Vec2 fdyts{ wh.y * fdy_texcoord.x, wh.y * fdy_texcoord.y};
+		//Vec2 fdxts{fdx_texcoord.x, fdx_texcoord.y };
+		//Vec2 fdyts{fdy_texcoord.x, fdy_texcoord.y };
+		
+		//std::cout << "vxd, vx = " + std::to_string(fdx_texcoord.y) + " " + std::to_string(fdxts.y) + " \n";
+		//std::cout << "vyd, vy = " + std::to_string(fdy_texcoord.y) + " " + std::to_string(fdyts.y) + " \n";
+		float l = sqrt(std::max(((fdxts.x * fdxts.x) + (fdxts.y * fdxts.y)),
+								((fdyts.x * fdyts.x) + (fdyts.y * fdyts.y))));
+		float lod = std::clamp(log2(l), 0.0f, std::numeric_limits<float>::max());
+		// std::cout << "lod = " + std::to_string(lod) + " l = " + std::to_string(l) + "\n";
 		//-----
 
 		Vec3 normal = fa_normal.unit();

@@ -272,7 +272,6 @@ Test test_a1_task6_lod_simple("a1.task6.lod.simple", []() {
 		L::shade_fragment(parameters, attribs, derivs, &out_color, &out_opacity);
 
 		float lod = out_color.b;
-
 		if (!(min_lod <= lod && lod <= max_lod)) {
 			std::string params;
 			params += "case '" + desc + "':\n";
