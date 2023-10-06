@@ -1,6 +1,6 @@
 **Assignment 2 Report**
 
-AndrewID: XXXX
+AndrewID: rafaelri
 
 (##) About this template
 
@@ -20,7 +20,7 @@ You do not need any screenshots for this task.
 
 **What edge cases did you handle?**
 
-*  Answer here:
+*  Answer here: Edge case where the selected edge has a boundary halfedge. This makes flipping impossible.
 
 Your completion will be graded based on the reference `test.a2.l1.cpp` file and 
 checking that the operation works in the GUI.
@@ -31,7 +31,7 @@ You do not need any screenshots for this task.
 
 **What edge cases did you handle?**
 
-*  Answer here:
+*  Answer here: Unsure if it counts as an edge case but handled separate method for splitting when selected edge has a boundary halfedge. In this case, only the halfedge with a non-boundary face will be split. 
 
 Your completion will be graded based on the reference `test.a2.l2.cpp` file and 
 checking that the operation works in the GUI.
@@ -42,7 +42,7 @@ You do not need any screenshots for this task.
 
 **What edge cases did you handle?**
 
-*  Answer here:
+*  Answer here: Included a (probably impossible) edge case where the selected edge has two boundary halfedges. Also checked for cases where one halfedge is a boundary halfedge and the other is a triangle. Lastly, implemented an hourglass mesh checker that loops over all the outgoing halfedges from each vertex in the edge, and doesn't collapse if both vertices have at least one boundary halfedge. Lastly, included some branching paths for quad | boundary collapsing, and separate handling for tris in a zero boundary collapse, although I'm unsure if these count as edge cases. 
 
 Your completion will be graded based on the reference `test.a2.l3.cpp` file and 
 checking that the operation works in the GUI.
@@ -53,7 +53,7 @@ You do not need any screenshots for this task.
 
 **What edge cases did you handle?**
 
-*  Answer here:
+*  Answer here: As far as I can tell, neither bevel_face nor extrude positions have any edge cases (and my code seems functional enough). I don't see how a valid face could need to be handled separately.
 
 Your completion will be graded based on the reference `test.a2.l4.cpp` file and 
 checking that the operation works in the GUI.
