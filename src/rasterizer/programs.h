@@ -134,7 +134,10 @@ struct Lambertian {
 		//std::cout << "vyd, vy = " + std::to_string(fdy_texcoord.y) + " " + std::to_string(fdyts.y) + " \n";
 		float l = sqrt(std::max(((fdxts.x * fdxts.x) + (fdxts.y * fdxts.y)),
 								((fdyts.x * fdyts.x) + (fdyts.y * fdyts.y))));
-		float lod = std::clamp(log2(l), 0.0f, std::numeric_limits<float>::max());
+		float lod = log2(l);
+		if (lod < 0.0f) {
+			lod = 0.0f;
+		}
 		// std::cout << "lod = " + std::to_string(lod) + " l = " + std::to_string(l) + "\n";
 		//-----
 

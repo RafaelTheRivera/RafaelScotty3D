@@ -221,9 +221,193 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::bisect_edge(EdgeRef e) {
  */
 std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::split_edge(EdgeRef e) {
 	// A2L2 (REQUIRED): split_edge
+
+	// These are important for conditionals
+	HalfedgeRef h = e->halfedge;
+	HalfedgeRef t = h->twin;
+
 	
-	(void)e; //this line avoids 'unused parameter' warnings. You can delete it as you fill in the function.
-    return std::nullopt;
+	//handle boundary cases as if h is boundary
+	if (h->face->boundary || t->face->boundary) {
+
+		//this cheekily avoids doubling this code
+		if (t->face->boundary) {
+			t = e->halfedge;
+			h = t->twin;
+		}
+		
+		// create
+		FaceRef f3 = emplace_face();
+		FaceRef f1 = t->face;
+		EdgeRef e1 = emplace_edge();
+		EdgeRef e2 = emplace_edge();
+		HalfedgeRef h1 = emplace_halfedge();
+		HalfedgeRef t1 = emplace_halfedge();
+		HalfedgeRef h2 = emplace_halfedge();
+		HalfedgeRef t2 = emplace_halfedge();
+		VertexRef c = emplace_vertex();
+		c->position = e->center();
+		//h twins t1, t twins h1;
+
+		/*std::cout << "added f3 " + std::to_string(f3->id) + "\n";
+		std::cout << "found f1 " + std::to_string(f1->id) + "\n";
+		std::cout << "added e1 " + std::to_string(e1->id) + "\n";
+		std::cout << "added e2 " + std::to_string(e2->id) + "\n";
+		std::cout << "added h1 " + std::to_string(h1->id) + "\n";
+		std::cout << "added t1 " + std::to_string(t1->id) + "\n";
+		std::cout << "added h2 " + std::to_string(h2->id) + "\n";
+		std::cout << "added t2 " + std::to_string(t2->id) + "\n";
+		std::cout << "added c " + std::to_string(c->id) + "\n";*/
+		
+		//assign vertices
+		t1->vertex = c;
+		h1->vertex = c;
+		h2->vertex = c;
+		t2->vertex = t->next->next->vertex;
+		c->halfedge = t1;
+
+		//assign halfedges
+		h1->next = h->next;
+		h->next = h1;
+		t1->next = t->next;
+		t->next = h2;
+		h->twin = t1;
+		t->twin = h1;
+		h1->twin = t;
+		t1->twin = h;
+		h2->next = t1->next->next;
+		t1->next->next = t2;
+		t2->next = t1;
+		t2->twin = h2;
+		h2->twin = t2;
+
+		//assign edges
+		t1->edge = e;
+		t->edge = e1;
+		h1->edge = e1;
+		e->halfedge = h;
+		e1->halfedge = t;
+		t2->edge = e2;
+		h2->edge = e2;
+		e2->halfedge = h2;
+
+		//assign faces
+		f3->halfedge = t2;
+		f1->halfedge = t;
+		t1->face = f3;
+		t1->next->face = f3;
+		t2->face = f3;
+		h2->face = f1;
+		h1->face = h->face;
+
+		return c;
+	}
+	
+	FaceRef f1 = h->face;
+	FaceRef f2 = t->face;
+	FaceRef f3 = emplace_face();
+	FaceRef f4 = emplace_face();
+	EdgeRef e1 = emplace_edge();
+	EdgeRef e2 = emplace_edge();
+	EdgeRef e3 = emplace_edge();
+	HalfedgeRef h1 = emplace_halfedge();
+	HalfedgeRef t1 = emplace_halfedge();
+	HalfedgeRef h2 = emplace_halfedge();
+	HalfedgeRef t2 = emplace_halfedge();
+	HalfedgeRef h3 = emplace_halfedge();
+	HalfedgeRef t3 = emplace_halfedge();
+
+	//again, h pairs t1, t pairs h1
+
+	VertexRef c = emplace_vertex();
+	c->position = e->center();
+	/*std::cout << "found f1 " + std::to_string(f1->id) + "\n";
+	std::cout << "found f2 " + std::to_string(f2->id) + "\n";
+	std::cout << "added f3 " + std::to_string(f3->id) + "\n";
+	std::cout << "added f3 " + std::to_string(f4->id) + "\n";
+	std::cout << "found e " + std::to_string(e->id) + "\n";
+	std::cout << "added e1 " + std::to_string(e1->id) + "\n";
+	std::cout << "added e2 " + std::to_string(e2->id) + "\n";
+	std::cout << "added e3 " + std::to_string(e3->id) + "\n";
+	std::cout << "found h " + std::to_string(h->id) + "\n";
+	std::cout << "found t " + std::to_string(t->id) + "\n";
+	std::cout << "added h1 " + std::to_string(h1->id) + "\n";
+	std::cout << "added t1 " + std::to_string(t1->id) + "\n";
+	std::cout << "added h2 " + std::to_string(h2->id) + "\n";
+	std::cout << "added t2 " + std::to_string(t2->id) + "\n";
+	std::cout << "added h3 " + std::to_string(h3->id) + "\n";
+	std::cout << "added t3 " + std::to_string(t3->id) + "\n";
+	std::cout << "added c " + std::to_string(c->id) + "\n";*/
+
+	//assign vertices
+	h1->vertex = c;
+	h2->vertex = c;
+	t1->vertex = c;
+	h3->vertex = c;
+	t2->vertex = h->next->next->vertex;
+	t3->vertex = t->next->next->vertex;
+	c->halfedge = h1;
+
+	//assign halfedges
+	h->twin = t1;
+	t1->twin = h;
+	t->twin = h1;
+	h1->twin = t;
+	h2->twin = t2;
+	t2->twin = h2;
+	h3->twin = t3;
+	t3->twin = h3;
+
+	h1->next = h->next;
+	t1->next = t->next;
+	h2->next = h->next->next;
+	h3->next = t->next->next;
+	h->next->next = t2;
+	t->next->next = t3;
+	h->next = h2;
+	t->next = h3;
+	t2->next = h1;
+	t3->next = t1;
+
+	//assign edges
+	e->halfedge = h;
+	e1->halfedge = t;
+	e2->halfedge = h2;
+	e3->halfedge = h3;
+	t1->edge = e;
+	t->edge = e1;
+	h1->edge = e1;
+	h2->edge = e2;
+	t2->edge = e2;
+	h3->edge = e3;
+	t3->edge = e3;
+
+	//assign faces
+	f1->halfedge = h;
+	f2->halfedge = t;
+	f3->halfedge = h1;
+	f4->halfedge = t1;
+	h2->face = f1;
+	t2->face = f3;
+	h1->face = f3;
+	t1->face = f4;
+	h3->face = f2;
+	t3->face = f4;
+	t1->next->face = f4;
+	h1->next->face = f3;
+
+
+
+	/*VertexRef v1 = h->vertex;
+	VertexRef v2 = t->vertex;
+	VertexRef v3 = h->next->vertex;
+	VertexRef v4 = t->next->vertex;
+	FaceRef f1 = h->face;
+	FaceRef f2 = t->face;*/
+
+
+	//(void)e; //this line avoids 'unused parameter' warnings. You can delete it as you fill in the function.
+    return c;
 }
 
 
@@ -314,8 +498,149 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::extrude_face(FaceRef f) {
 	// Reminder: This function does not update the vertex positions.
 	// Remember to also fill in extrude_helper (A2L4h)
 
-	(void)f;
-    return std::nullopt;
+	HalfedgeRef h = f->halfedge;
+	//std::cout << "h " + std::to_string(h->id) + "\n";
+	// create new vertex, set position to h->vertex
+	VertexRef vStart = emplace_vertex();
+	vStart->position = h->vertex->position;
+
+	// create edge and halfedges connecting vertex
+	EdgeRef eStart = emplace_edge();
+	HalfedgeRef hStart = emplace_halfedge();
+	HalfedgeRef tStart = emplace_halfedge();
+	//std::cout << "hstart " + std::to_string(hStart->id) + "\n";
+	//std::cout << "tstart " + std::to_string(tStart->id) + "\n";
+	hStart->twin = tStart;
+	tStart->twin = hStart;
+	hStart->vertex = h->vertex;
+	h->vertex->halfedge = h;
+	tStart->vertex = vStart;
+	vStart->halfedge = tStart;
+	hStart->edge = eStart;
+	tStart->edge = eStart;
+	eStart->halfedge = hStart;
+	tStart->next = h;
+	//face DNE yet
+
+	HalfedgeRef hprev = h;
+	//HalfedgeRef hsprev = hStart;
+	HalfedgeRef tprev = tStart; //Note that this t is not the twin of hprev
+	HalfedgeRef tfprev = tStart; //this will be overrided later.
+	HalfedgeRef tffirst;
+	//FaceRef fprev = f;
+	HalfedgeRef hnow = h->next;
+
+	// loop over halfedges until we get back to h
+	while (hnow != h) {
+		VertexRef vnow = hnow->vertex;
+		VertexRef vnew = emplace_vertex();
+		vnew->position = vnow->position;
+		//std::cout << "hnow " + std::to_string(hnow->id) + "\n";
+
+		EdgeRef enew = emplace_edge();
+		HalfedgeRef hnew = emplace_halfedge();
+		HalfedgeRef tnew = emplace_halfedge();
+		//std::cout << "hnew " + std::to_string(hnew->id) + "\n";
+		//std::cout << "tnew " + std::to_string(tnew->id) + "\n";
+		hnew->twin = tnew;
+		tnew->twin = hnew;
+		hnew->vertex = vnow;
+		vnow->halfedge = hnew;
+		tnew->vertex = vnew;
+		vnew->halfedge = tnew;
+		hnew->edge = enew;
+		tnew->edge = enew;
+		enew->halfedge = hnew;
+		
+		FaceRef fnew = emplace_face(); //old face is becoming new center face
+		//std::cout << "fnew " + std::to_string(fnew->id) + "\n";
+		EdgeRef ef = emplace_edge();
+		HalfedgeRef hf = emplace_halfedge();
+		HalfedgeRef tf = emplace_halfedge();
+		//std::cout << "hf " + std::to_string(hf->id) + "\n";
+		//std::cout << "tf " + std::to_string(tf->id) + "\n";
+		hf->twin = tf;
+		tf->twin = hf;
+		hf->vertex = vnew;
+		tf->vertex = tprev->vertex;
+		hf->vertex->halfedge = hf;
+		tf->vertex->halfedge = tf;
+		hf->edge = ef;
+		tf->edge = ef;
+		ef->halfedge = hf;
+		hf->next = tprev;
+		tnew->next = hnow;
+		hprev->next = hnew;
+		//std::cout << "hprev " + std::to_string(hprev->id) + " points to " + std::to_string(hnew->id) + "\n";
+		hnew->next = hf;
+		
+		if (tfprev != tStart) { // has to be done here because these references disappear in next loop
+			tfprev->next = tf;
+			//std::cout << "tf prev " + std::to_string(tfprev->id) + " points to " + std::to_string(tf->id) + "\n";
+		}
+		else {
+			tffirst = tf;
+		}
+		tprev->face = fnew;
+		hprev->face = fnew;
+		//std::cout << "hprev " + std::to_string(hprev->id) + " face points to " + std::to_string(fnew->id) + "\n";
+		hf->face = fnew;
+		hnew->face = fnew;
+		fnew->halfedge = hprev;
+
+		tf->face = f;
+		f->halfedge = tf;
+
+		//update values before next round
+		hprev = hnow;
+		tprev = tnew;
+		tfprev = tf;
+		//fprev = fnew;
+		//std::cout << "f " + std::to_string(fnew->id) + " halfedge points to " + std::to_string(fnew->halfedge->id) + "\n";
+		//std::cout << "Looping...";
+		hnow = hnow->next;
+		// hnow->next= 
+	}
+
+	//std::cout << "Out.";
+	// fill in last set of inner edges and faces.
+	HalfedgeRef hflast = emplace_halfedge();
+	HalfedgeRef tflast = emplace_halfedge();
+	//std::cout << "tf! " + std::to_string(tflast->id) + "\n";
+	EdgeRef elast = emplace_edge();
+	FaceRef flast = emplace_face();
+	//std::cout << "flast " + std::to_string(flast->id) + "\n";
+
+	hflast->twin = tflast;
+	tflast->twin = hflast;
+	hflast->edge = elast;
+	tflast->edge = elast;
+	elast->halfedge = hflast;
+	hflast->vertex = vStart;
+	hflast->next = tprev;
+	tflast->vertex = tprev->vertex;
+	tfprev->next = tflast;
+	hStart->next = hflast;
+	//std::cout << "tf prev " + std::to_string(tfprev->id) + " points to " + std::to_string(tflast->id) + "\n";
+	tflast->next = tffirst;
+	hprev->next = hStart;
+	//std::cout << "tf prev " + std::to_string(tflast->id) + " points to " + std::to_string(tffirst->id) + "\n";
+	//h->face = flast;
+	hprev->face = flast;
+	//hStart->face = flast;
+	hflast->face = flast;
+	tprev->face = flast;
+	hStart->face = flast;
+	flast->halfedge = hprev;
+	
+	tflast->face = f;
+	f->halfedge = tflast;
+
+	//std::cout << "Extrude";
+	//extrude_positions(f, Vec3(0.0f), 0.5f);
+
+	//(void)f;
+    return f;
 }
 
 /*
@@ -332,7 +657,59 @@ std::optional<Halfedge_Mesh::FaceRef> Halfedge_Mesh::extrude_face(FaceRef f) {
 std::optional<Halfedge_Mesh::EdgeRef> Halfedge_Mesh::flip_edge(EdgeRef e) {
 	//A2L1: Flip Edge
 	
-    return std::nullopt;
+	HalfedgeRef h = e->halfedge;
+	HalfedgeRef t = h->twin;
+
+	VertexRef v1 = h->next->vertex;
+	VertexRef v2 = t->next->vertex;
+	VertexRef v3 = h->next->next->vertex;
+	VertexRef v4 = t->next->next->vertex;
+	FaceRef f1 = h->face;
+	FaceRef f2 = t->face;
+	HalfedgeRef prevh = h->next;
+	HalfedgeRef prevt = t->next;
+
+	//finding prevh and prevt
+	while (prevh->next != h) {
+		prevh = prevh->next;
+	}
+	while (prevt->next != t) {
+		prevt = prevt->next;
+	}
+	//std::cout << "h = " + std::to_string(h->id) + "; prevh = " + std::to_string(prevh->id) + "; h->next = " + std::to_string(h->next->id) + "\n";
+	//std::cout << "t = " + std::to_string(t->id) + "; prevt = " + std::to_string(prevt->id) + "; t->next = " + std::to_string(t->next->id) + "\n";
+
+	//case: boundary edge
+	if (f1->boundary || f2->boundary) {
+		return std::nullopt;
+	}
+
+
+	v1->halfedge = h->next;
+	v2->halfedge = t->next;
+	f1->halfedge = h;
+	f2->halfedge = t;
+
+	t->next->face = f1;
+	prevh->next = t->next;
+	h->next->face = f2;
+	prevt->next = h->next;
+	t->vertex = v3;
+	h->vertex = v4;
+	t->next = t->next->next;
+	h->next = h->next->next;
+	v1->halfedge->next = t;
+	v2->halfedge->next = h;
+	//std::cout << "h from " + std::to_string(h->vertex->id) + " to " + std::to_string(h->next->vertex->id) + "\n";
+	//std::cout << "t from " + std::to_string(t->vertex->id) + " to " + std::to_string(t->next->vertex->id) + "\n";
+
+	//f1->halfedge = h;
+	//f2->halfedge = t;
+	//h->set_tnvef(t, h->next->next, v4, e, f1);
+	//t->set_tnvet(h, t->next->next, v3, e, f2);
+
+
+    return e;
 }
 
 
@@ -392,8 +769,294 @@ std::optional<Halfedge_Mesh::VertexRef> Halfedge_Mesh::collapse_edge(EdgeRef e) 
 
 	//Reminder: use interpolate_data() to merge corner_uv / corner_normal data on halfedges
 	// (also works for bone_weights data on vertices!)
-	
-    return std::nullopt;
+
+	auto applyToAllHalfedgesAroundVertex = [=](VertexRef v, auto&& f) {
+		HalfedgeRef h = v->halfedge;
+		HalfedgeRef t = h->twin;
+
+		auto first = f(h) + f(t);
+		HalfedgeRef ith = t->next;
+		HalfedgeRef itt = ith->twin;
+		while (ith != h) {
+			//std::cout << std::to_string(first) + "\n";
+			first = first + f(ith) + f(itt);
+			ith = itt->next;
+			itt = ith->twin;
+		}
+		return first;
+		};
+
+	HalfedgeRef h = e->halfedge;
+	HalfedgeRef t = h->twin;
+	// pretty sure this shouldn't happen
+	if (h->face->boundary && t->face->boundary) {
+		return std::nullopt;
+	}
+
+
+	// boundary case
+	if (h->face->boundary || t->face->boundary) {
+		if (t->face->boundary) {
+			t = e->halfedge;
+			h = t->twin;
+		}
+		//check for triangle
+		if (t->next->next->next == t) {
+			// solo triangle - don't collapse
+			if ((t->next->twin->face->boundary) && (t->next->next->twin->face->boundary)) {
+
+				return std::nullopt;
+			}
+			interpolate_data({ h->vertex, t->vertex }, h->vertex);
+			h->vertex->position = e->center();
+			h->vertex->halfedge = h;
+			//shift h over one because easier
+			HalfedgeRef toDelete = h->next;
+			h->next->twin->twin = h;
+			h->twin = h->next->twin;
+			h->next->edge->halfedge = h;
+			h->edge = h->next->edge;
+			h->next = h->next->next;
+			HalfedgeRef hkeep = t->next->twin;
+			HalfedgeRef tkeep = t->next->next->twin;
+
+			erase_face(t->face);
+			//if tkeep is boundary, h->next is tkeep, deleting tkeep will ruin h.
+
+			tkeep->twin = hkeep;
+			hkeep->twin = tkeep;
+			hkeep->edge->halfedge = hkeep;
+			hkeep->vertex->halfedge = hkeep;
+			tkeep->vertex = h->vertex;
+			tkeep->vertex->halfedge = tkeep;
+			tkeep->edge->halfedge = tkeep;
+			erase_edge(tkeep->edge);
+			tkeep->edge = hkeep->edge;
+			erase_vertex(t->vertex);
+			erase_edge(t->edge);
+
+			if (h->next == tkeep) {
+				h->twin = hkeep;
+				hkeep->twin = h;
+			}
+			toDelete->vertex->halfedge = h;
+			toDelete->face->halfedge = h;
+			erase_halfedge(toDelete);
+			erase_halfedge(t->next->next);
+			erase_halfedge(t->next);
+			//std::cout << "erasing halfedge " + std::to_string(t->id) + "\n";
+			erase_halfedge(t);
+			return h->vertex;
+		}
+		//non-tri on bound case
+		interpolate_data({ h->vertex, t->vertex }, h->vertex);
+		h->vertex->position = e->center();
+		h->vertex->halfedge = h;
+
+		EdgeRef oldEdge = h->edge;
+		//VertexRef oldVert = h->next->vertex;
+		HalfedgeRef deleteTNext = t->next;
+		t->next->vertex->halfedge = t;
+		t->next->edge->halfedge = t;
+		t->next->face->halfedge = t;
+		t->next->twin->twin = t;
+		t->twin = t->next->twin;
+		t->next = t->next->next;
+		t->edge = t->twin->edge;
+		erase_halfedge(deleteTNext);
+
+		HalfedgeRef deleteHNext = h->next;
+		h->next->vertex->halfedge = h;
+		h->next->edge->halfedge = h;
+		h->next->face->halfedge = h;
+		h->next->twin->twin = h;
+		h->twin = h->next->twin;
+		h->next = h->next->next;
+		h->edge = h->twin->edge;
+		erase_halfedge(deleteHNext);
+
+		erase_vertex(t->vertex);
+		t->vertex = h->vertex;
+		erase_edge(oldEdge);
+		return h->vertex;
+
+	}
+	//no boundary on either side
+
+	/*HalfedgeRef prevh = h->next;
+	HalfedgeRef prevt = t->next;
+
+	//finding prevh and prevt
+	while (prevh->next != h) {
+		prevh = prevh->next;
+	}
+	while (prevt->next != t) {
+		prevt = prevt->next;
+	}*/
+
+	//hourglass edge case (also covers two floating triangle case)
+	auto isBoundary = [=](HalfedgeRef in) {
+		if (in->face->boundary) {
+			return 1;
+		}
+		return 0;
+		};
+	int hbound = applyToAllHalfedgesAroundVertex(h->vertex, isBoundary);
+	int tbound = applyToAllHalfedgesAroundVertex(t->vertex, isBoundary);
+	if ((hbound > 0) && (tbound > 0)) {
+		return std::nullopt;
+	}
+
+	// no more real edge cases, edge guaranteed to collapse
+	interpolate_data({ h->vertex, t->vertex }, h->vertex);
+	VertexRef vout = h->vertex;
+	VertexRef tVert = t->vertex;
+	h->vertex->position = e->center();
+	h->vertex->halfedge = h;
+
+	auto moveToh = [=, &vout, &tVert](HalfedgeRef in) {
+		if (in->vertex == tVert) {
+			in->vertex = vout;
+			vout->halfedge = in;
+			std::cout << "Routing " + std::to_string(in->id) + " to " + std::to_string(vout->id) + "\n";
+		}
+		return 0;
+		};
+
+	applyToAllHalfedgesAroundVertex(t->vertex, moveToh);
+
+	// h is a triangle side
+	if (h->next->next->next == h) {
+		//std::cout << "h = " + std::to_string(h->id) + "; h->next = " + std::to_string(h->next->id) + "; h->next->next = " + std::to_string(h->next->next->id) + "\n";
+		//std::cout << "h halfedge = " + std::to_string(vout->halfedge->id) + "\n";
+		if (h->next->twin->face->boundary) {
+			h->next->twin->twin = h->next->next->twin;
+			h->next->next->twin->twin = h->next->twin;
+			h->next->twin->edge = h->next->next->edge;
+			//h->next->twin->face = h->next->next->twin->face;
+			h->next->twin->vertex->halfedge = h->next->twin;
+			h->next->twin->edge->halfedge = h->next->twin;
+			h->next->twin->face->halfedge = h->next->twin;
+			h->vertex->halfedge = h->next->twin;
+			h->next->next->vertex->halfedge = h->next->next->twin->next;
+			//std::cout << "h halfedge = " + std::to_string(vout->halfedge->id) + "\n";
+
+			erase_face(h->face);
+			erase_edge(h->next->edge);
+			erase_halfedge(h->next->next);
+			erase_halfedge(h->next);
+			erase_halfedge(h);
+			// skip erasing anything t related as this will be handled later
+		}
+		else {
+			//if (h->next->next->twin->face->boundary) {
+				h->next->twin->twin = h->next->next->twin;
+				h->next->next->twin->twin = h->next->twin;
+
+				h->next->next->twin->edge = h->next->edge;
+				//h->next->next->twin->face = h->next->twin->face;
+				h->next->next->twin->vertex->halfedge = h->next->next->twin;
+				h->next->next->twin->edge->halfedge = h->next->next->twin;
+				h->next->next->twin->face->halfedge = h->next->next->twin;
+				h->vertex->halfedge = h->next->next->twin;
+				h->next->next->vertex->halfedge = h->next->next->twin->next;
+
+				erase_face(h->face);
+				erase_edge(h->next->next->edge);
+				erase_halfedge(h->next->next);
+				erase_halfedge(h->next);
+				erase_halfedge(h);
+			/* }
+			else {
+
+			}*/
+		}
+	}
+	// h has 3+ sides
+	else {
+		HalfedgeRef hn = h->next;
+		//std::cout << "1t halfedge = " + std::to_string(h->next->vertex->halfedge->id) + "\n";
+		h->next->vertex->halfedge = h;
+		//std::cout << "2t halfedge = " + std::to_string(h->next->vertex->halfedge->id) + "\n";
+		h->next->edge->halfedge = h;
+		h->next->face->halfedge = h;
+		h->vertex = h->next->vertex;
+		h->edge = h->next->edge;
+		h->twin = h->next->twin;
+		h->next->twin->twin = h;
+		h->next = h->next->next;
+		h->next->next->vertex->halfedge = h->next->next->twin->next;
+
+		erase_halfedge(hn);
+	}
+
+
+	// t is a triangle side
+	if (t->next->next->next == t) {
+		if (t->next->twin->face->boundary) {
+			t->next->twin->twin = t->next->next->twin;
+			t->next->next->twin->twin = t->next->twin;
+			t->next->twin->edge = t->next->next->edge;
+			//t->next->twin->face = t->next->next->twin->face;
+			t->next->twin->vertex->halfedge = t->next->twin;
+			t->next->twin->edge->halfedge = t->next->twin;
+			t->next->twin->face->halfedge = t->next->twin;
+			//t->vertex->halfedge = t->next->twin;
+			t->next->next->vertex->halfedge = t->next->next->twin->next;
+
+			erase_face(t->face);
+			erase_edge(t->next->edge);
+			erase_halfedge(t->next->next);
+			erase_halfedge(t->next);
+			erase_vertex(tVert);
+			erase_edge(t->edge);
+			erase_halfedge(t);
+		}
+		else {
+			//if (h->next->next->twin->face->boundary) {
+			t->next->twin->twin = t->next->next->twin;
+			t->next->next->twin->twin = t->next->twin;
+
+			t->next->next->twin->edge = t->next->edge;
+			//t->next->next->twin->face = t->next->twin->face;
+			t->next->next->twin->vertex->halfedge = t->next->next->twin;
+			t->next->next->twin->edge->halfedge = t->next->next->twin;
+			t->next->next->twin->face->halfedge = t->next->next->twin;
+			//t->vertex->halfedge = t->next->next->twin;
+			t->next->next->vertex->halfedge = t->next->next->twin->next;
+
+			erase_face(t->face);
+			erase_edge(t->next->next->edge);
+			erase_halfedge(t->next->next);
+			erase_halfedge(t->next);
+			erase_vertex(tVert);
+			erase_edge(t->edge);
+			erase_halfedge(t);
+			/* }
+			else {
+
+			}*/
+		}
+	}
+	// t has 3+ sides
+	else {
+		HalfedgeRef tn = t->next;
+		erase_edge(t->edge);
+		erase_vertex(tVert);
+		t->next->vertex->halfedge = t;
+		t->next->edge->halfedge = t;
+		t->next->face->halfedge = t;
+		t->vertex = t->next->vertex;
+		t->edge = t->next->edge;
+		t->twin = t->next->twin;
+		t->next->twin->twin = t;
+		t->next = t->next->next;
+		t->next->next->vertex->halfedge = t->next->next->twin->next;
+
+		erase_halfedge(tn);
+	}
+
+    return vout;
 }
 
 /*
@@ -484,6 +1147,36 @@ void Halfedge_Mesh::extrude_positions(FaceRef face, Vec3 move, float shrink) {
 	// use mesh navigation to get starting positions from the surrounding faces,
 	// compute the centroid from these positions + use to shrink,
 	// offset by move
-	
+	//std::cout << "In";
+	HalfedgeRef hstart = face->halfedge;
+	HalfedgeRef hnow = hstart->next;
+	Vec3 c = hstart->vertex->position;
+	//std::cout << "(" + std::to_string(c.x) + ", " + std::to_string(c.y) + ", " + std::to_string(c.z) + ")\n";
+	int sides = 1;
+	while (hnow != hstart) {
+		//std::cout << "hnow " + std::to_string(hnow->id);
+		//std::cout << "Adding: (" + std::to_string(hnow->vertex->position.x) + ", " + std::to_string(hnow->vertex->position.y) + ", " + std::to_string(hnow->vertex->position.z) + ")\n";
+		c = hnow->vertex->position + c;
+		sides += 1;
+		hnow = hnow->next;
+		//std::cout << "(" + std::to_string(c.x) + ", " + std::to_string(c.y) + ", " + std::to_string(c.z) + ")\n";
+	}
+	//std::cout << "Sides";
+	c = c / ((float)sides);
+	Vec3 diff = c - hnow->vertex->position;
+	diff *= shrink;
+	diff += move;
+	hnow->vertex->position = hnow->vertex->position + diff;
+	hnow = hnow->next;
+	while (hnow != hstart) {
+		//std::cout << "Reassigning.";
+		diff = c - hnow->vertex->position;
+		diff *= shrink;
+		diff += move;
+		hnow->vertex->position = hnow->vertex->position + diff;
+		hnow = hnow->next;
+	}
+	//return face;
+
 }
 

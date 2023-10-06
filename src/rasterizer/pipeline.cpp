@@ -624,9 +624,9 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 	float yMax = std::max(ay, std::max(by, cy));
 
 	//lambda functions I don't want to retype repeatedly
-	auto det = [=](float x1, float y1, float x2, float y2) {
+	/*auto det = [=](float x1, float y1, float x2, float y2) {
 		return ((x1 * y2) - (y1 * x2));
-		};
+		};*/
 	
 
 	auto getBary = [=, &ax, &bx, &cx, &ay, &by, &cy](float qx, float qy, float aa, float ba, float ca) {
@@ -912,7 +912,7 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 					out.fb_position.x = xbl + 0.5f;
 					out.fb_position.y = ybl + 0.5f;
 					out.fb_position.z = getZ(out.fb_position.x, out.fb_position.y);
-					for (int attr = 0; attr < va.attributes.size(); attr++) {
+					for (uint32_t attr = 0; attr < va.attributes.size(); attr++) {
 						out.attributes[attr] = getBary(out.fb_position.x, out.fb_position.y, va.attributes[attr], vb.attributes[attr], vc.attributes[attr]);
 					}
 					float ux = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[0], vb.attributes[0], vc.attributes[0]);
@@ -939,7 +939,7 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 						out.fb_position.x = (float)ci + xbl + 0.5f;
 						out.fb_position.y = (float)ri + ybl + 0.5f;
 						out.fb_position.z = getZ(out.fb_position.x, out.fb_position.y);
-						for (int attr = 0; attr < va.attributes.size(); attr++) {
+						for (uint32_t attr = 0; attr < va.attributes.size(); attr++) {
 							out.attributes[attr] = getBary(out.fb_position.x, out.fb_position.y, va.attributes[attr], vb.attributes[attr], vc.attributes[attr]);
 						}
 						float ux = getBary(out.fb_position.x + 1.0f, out.fb_position.y, va.attributes[0], vb.attributes[0], vc.attributes[0]);
@@ -1009,7 +1009,7 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 					out.fb_position.x = xbl + 0.5f;
 					out.fb_position.y = ybl + 0.5f;
 					out.fb_position.z = getBary(out.fb_position.x, out.fb_position.y, az, bz, cz);
-					for (int attr = 0; attr < va.attributes.size(); attr++) {
+					for (uint32_t attr = 0; attr < va.attributes.size(); attr++) {
 						baryx = (((by - cy) * (out.fb_position.x - cx)) + ((cx - bx) * (out.fb_position.y - cy))) / d;
 						baryy = (((cy - ay) * (out.fb_position.x - cx)) + ((ax - cx) * (out.fb_position.y - cy))) / d;
 						baryz = 1.0f - baryx - baryy;
@@ -1062,7 +1062,7 @@ void Pipeline<p, P, flags>::rasterize_triangle(
 						out.fb_position.x = (float)ci + xbl + 0.5f;
 						out.fb_position.y = (float)ri + ybl + 0.5f;
 						out.fb_position.z = getZ(out.fb_position.x, out.fb_position.y);
-						for (int attr = 0; attr < va.attributes.size(); attr++) {
+						for (uint32_t attr = 0; attr < va.attributes.size(); attr++) {
 							baryx = (((by - cy) * (out.fb_position.x - cx)) + ((cx - bx) * (out.fb_position.y - cy))) / d;
 							baryy = (((cy - ay) * (out.fb_position.x - cx)) + ((ax - cx) * (out.fb_position.y - cy))) / d;
 							baryz = 1.0f - baryx - baryy;
