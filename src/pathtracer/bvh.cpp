@@ -31,6 +31,79 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 
     // Construct a BVH from the given vector of primitives and maximum leaf
     // size configuration.
+	float best_cost = std::numeric_limits<float>::max();
+	int best_partition;
+	int best_axis; // 0 = x, 1 = y, 2 = z;
+	BBox c;
+	//calculate c early because it's the same for all
+	for (int prim = 0; prim < primitives.size(); prim++) {
+		BBox ccurrent = primitives[prim].bbox();
+		c.enclose(ccurrent.center());
+	}
+
+	for (int axis = 0; axis < 3; axis++) {
+
+		auto compare_prims = [&axis](Primitive a, Primitive b) {
+			BBox abox = a.bbox(); 
+			BBox bsbox = b.bbox(); 
+			Vec3 centera = abox.center(); 
+			Vec3 centerb = bsbox.center(); 
+			return centera[axis] > centerb[axis];
+			};
+		std::sort(primitives.begin(), primitives.end(), compare_prims);
+
+		// sort(primitives, axis);
+		size_t n = primitives.size();
+		// make approximately equal bins as primitives per bin
+		size_t bin_n = (size_t)floor(sqrt((float)n));
+		size_t remainder = n % bin_n;
+		size_t bin_size = n / bin_n;
+		if (remainder != 0) {
+			bin_n += 1;
+		}
+		std::vector<SAHBucketData> buckets;
+		for (size_t i = 0; i < bin_n; i++) {
+			SAHBucketData bin;
+			// sorted by axis so we can just do this
+			for (size_t j = 0; i < bin_size; j++) {
+				if (i * bin_size + j < n) {
+					bin.bb.enclose(primitives[i * bin_size + j].bbox());
+					bin.num_prims += 1;
+				}
+			}
+			buckets.emplace_back(bin);
+		}
+
+		for (int j = 0; j < (bin_n-1); j++) {
+			BBox a, b;
+			size_t a_count = 0;
+			size_t b_count = 0;
+			for (int k = 0; k < bin_n; k++) {
+				auto compare = [&j, &k]() {
+					return (k <= j);
+					};
+				if (k <= j) {
+					a.enclose(buckets[k].bb);
+					a_count += buckets[k].num_prims;
+				}
+				else {
+					b.enclose(buckets[k].bb);
+					b_count += buckets[k].num_prims;
+				}
+			}
+			float cost = a.surface_area() / c.surface_area() * a_count + b.surface_area() / c.surface_area() * b_count;
+			if (cost < best_cost) {
+				best_cost = cost;
+				best_partition = j;
+				best_axis = axis;
+			}
+		}
+		
+
+		//decide where buckets are...
+
+
+	}
 
 	//TODO
 

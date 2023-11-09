@@ -1,6 +1,7 @@
 
 #include "../test.h"
 
+#include <iostream>
 #include "samplers.h"
 #include "tri_mesh.h"
 
@@ -16,6 +17,9 @@ BBox Triangle::bbox() const {
     // account for that here, or later on in BBox::hit.
 
     BBox box;
+	box.enclose(vertex_list[v0].position);
+	box.enclose(vertex_list[v1].position);
+	box.enclose(vertex_list[v2].position);
     return box;
 }
 
@@ -32,15 +36,42 @@ Trace Triangle::hit(const Ray& ray) const {
 
     // TODO (PathTracer): Task 2
     // Intersect the ray with the triangle defined by the three vertices.
+	auto distance = [](Vec3 a, Vec3 b) {
+		float xdist = b.x - a.x;
+		float ydist = b.y - a.y;
+		float zdist = b.z - a.z;
+		return sqrt(xdist * xdist + ydist * ydist + zdist * zdist);
+	};
+
+	Vec3 s = ray.point - v_0.position;
+	Vec3 e1 = v_1.position - v_0.position;
+	Vec3 e2 = v_2.position - v_0.position;
+	bool override = false;
+	
+	Vec3 dse1 = Vec3(-1.0f * (dot(cross(s, e2), ray.dir)), dot(cross(e1, ray.dir), s), -1.0f * (dot(cross(s, e2),e1)));
+	Vec3 uvt = (1.0f / dot(cross(e1, ray.dir), e2)) * dse1;
+	Vec3 lefteq = (e1 * uvt.x) + (e2 * uvt.y) + ( -1.0f * ray.dir * uvt.z);
+
+	float w = 1.0f - uvt.x - uvt.y;
+
+	if (w < 0.0f || uvt.x < 0.0f || uvt.y < 0.0f) {
+		override = true;
+	} 
 
     Trace ret;
     ret.origin = ray.point;
-    ret.hit = false;       // was there an intersection?
-    ret.distance = 0.0f;   // at what distance did the intersection occur?
-    ret.position = Vec3{}; // where was the intersection?
-    ret.normal = Vec3{};   // what was the surface normal at the intersection?
+	if (override) {
+		ret.hit = false;
+	}
+	else {
+		ret.hit = (distance(lefteq, s) < 0.00004f);       // was there an intersection?
+	}
+	// std::cout << "Ray hit = " + std::to_string(ret.hit) + "\n";
+    ret.distance = uvt.z;   // at what distance did the intersection occur?
+    ret.position = ray.point + uvt.z * ray.dir; // where was the intersection?
+    ret.normal = v_0.normal * w + v_1.normal * uvt.x + v_2.normal * uvt.y;   // what was the surface normal at the intersection?
                            // (this should be interpolated between the three vertex normals)
-	ret.uv = Vec2{};	   // What was the uv associated with the point of intersection?
+	ret.uv = v_0.uv * w + v_1.uv * uvt.x + v_2.uv * uvt.y;	   // What was the uv associated with the point of intersection?
 						   // (this should be interpolated between the three vertex uvs)
     return ret;
 }

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <iostream>
 #include <ostream>
 #include <vector>
 
@@ -84,8 +85,57 @@ struct BBox {
 		// Implement ray - bounding box intersection test
 		// If the ray intersected the bounding box within the range given by
 		// [times.x,times.y], update times with the new intersection times.
+		float tmin, tmax, tymin, tymax, tzmin, tzmax;
 
-		return false;
+		Vec3 invdir = 1.0f / ray.dir;
+		/*
+		std::cout << "ray: (" + std::to_string(ray.point.x) + ", " + std::to_string(ray.point.y) + ", " + std::to_string(ray.point.z) + ")\n";
+		std::cout << "dir: (" + std::to_string(ray.dir.x) + ", " + std::to_string(ray.dir.y) + ", " + std::to_string(ray.dir.z) + ")\n";
+		std::cout << "min: (" + std::to_string(BBox::min.x) + ", " + std::to_string(BBox::min.y) + ", " + std::to_string(BBox::min.z) + ")\n";
+		std::cout << "max: (" + std::to_string(BBox::max.x) + ", " + std::to_string(BBox::max.y) + ", " + std::to_string(BBox::max.z) + ")\n";
+		std::cout << "times: (" + std::to_string(times.x) + ", " + std::to_string(times.y) + ")\n";
+
+		std::cout << "invdir: (" + std::to_string(invdir.x) + ", " + std::to_string(invdir.y) + ", " + std::to_string(invdir.z) + ")\n";
+		*/
+		tmin =  (BBox::min.x - ray.point.x) * invdir.x;
+		tmax =  (BBox::max.x - ray.point.x) * invdir.x;
+		tymin = (BBox::min.y - ray.point.y) * invdir.y;
+		tymax = (BBox::max.y - ray.point.y) * invdir.y;
+
+		if ((tmin > tymax) || (tymin > tmax)) {
+			return false;
+		}
+		if (tymin > tmin) {
+			tmin = tymin;
+		}
+		if (tymax > tmax) {
+			tmax = tymax;
+		}
+
+		tzmin = (BBox::min.z - ray.point.z) * invdir.z;
+		tzmax = (BBox::max.z - ray.point.z) * invdir.z;
+
+		if ((tmin > tzmax) || (tzmin > tmax)) {
+			return false;
+		}
+
+		if (tzmin > tmin) {
+			tmin = tzmin;
+		}
+
+		if (tzmax < tmax) {
+			tmax = tzmax;
+		}
+
+		if (tmax < times.x || tmin > times.y) {
+			return false;
+		}
+		// std::cout << "pass with " + std::to_string(tmin) + " - " + std::to_string(tmax) + "\n";
+
+		times = Vec2(tmin, tmax);
+		// std::cout << "times new: (" + std::to_string(times.x) + ", " + std::to_string(times.y) + ")\n";
+
+		return true;
 	}
 
 	/// Get the eight corner points of the bounding box
