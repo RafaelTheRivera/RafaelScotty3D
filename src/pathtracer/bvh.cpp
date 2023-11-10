@@ -29,14 +29,14 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 	// Keep these
 	nodes.clear();
 	primitives = std::move(prims);
-	for (int primnow = 0; primnow < primitives.size(); primnow++) {
+	/*for (int primnow = 0; primnow < primitives.size(); primnow++) {
 		BBox bad = primitives[primnow].bbox();
 		std::cout << "Primitive " + std::to_string(primnow) + " ";
 		std::cout << "Min: (" + std::to_string(bad.min.x) + ", " + std::to_string(bad.min.y) + ", " + std::to_string(bad.min.z) + "); ";
 		std::cout << "Max: (" + std::to_string(bad.max.x) + ", " + std::to_string(bad.max.y) + ", " + std::to_string(bad.max.z) + ") \n";
 		
-	}
-	std::cout << "max leaf " + std::to_string(max_leaf_size) + "\n";
+	}*/
+	// std::cout << "max leaf " + std::to_string(max_leaf_size) + "\n";
 	// Construct a BVH from the given vector of primitives and maximum leaf
 	// size configuration.
 	auto recurse = [&](size_t start, size_t end, auto&& recurse) {
@@ -73,15 +73,15 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 
 			std::cout << "Current size : " + std::to_string(c.surface_area()) + "\n";
 		*/
-			if (distance(ccurrent.min, ccurrent.max) > 10000) {
+			/*if (distance(ccurrent.min, ccurrent.max) > 10000) {
 				BBox bad = ccurrent;
 				std::cout << "something went wrong with primitive " + std::to_string(prim) + " earlier than expected. \n";
 				std::cout << "Min: (" + std::to_string(bad.min.x) + ", " + std::to_string(bad.min.y) + ", " + std::to_string(bad.min.z) + ") \n";
 				std::cout << "Max: (" + std::to_string(bad.max.x) + ", " + std::to_string(bad.max.y) + ", " + std::to_string(bad.max.z) + ") \n";
-			}
+			}*/
 		}
 		if (end - start <= max_leaf_size) {
-			std::cout << "early out\n";
+			// std::cout << "early out\n";
 			size_t m = new_node(c, start, end-start, 0, 0);
 			return m;
 		}
@@ -101,24 +101,53 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 			std::sort(primitives.begin() + start, primitives.begin() + end, compare_prims);
 
 
-			size_t n = end - start;
+			// size_t n = end - start;
 			// make approximately equal bins as primitives per bin
-			size_t bin_n = (size_t)ceil(sqrt((float)n));
-			size_t remainder = n % bin_n;
-			size_t bin_size = (size_t)ceil((float)n / (float)bin_n);
+			size_t bin_n =  8; // (size_t)ceil(sqrt((float)n));
+			// size_t remainder = n % bin_n;
+			// size_t bin_size = (size_t)ceil((float)n / (float)bin_n);
+
+			// n = 17 -> bin_n = 5 -> bin_size = 4
 			
 			/*if (n == 2) {
 				bin_n = 2;
 				remainder = 0;
 				bin_size = 1;
 			}*/
-			std::cout << "total = " + std::to_string(n) + " bin_n " + std::to_string(bin_n) + " remainder " + std::to_string(remainder) + " bin size " + std::to_string(bin_size) + "\n";
+			// std::cout << "total = " + std::to_string(n) + " bin_n " + std::to_string(bin_n) + " remainder " + std::to_string(remainder) + " bin size " + std::to_string(bin_size) + "\n";
 			//std::cout << "first loop\n";
 			std::vector<SAHBucketData> buckets;
 			
-			for (size_t i = 0; i < bin_n; i++) {
+			for (size_t bucket_it = 0; bucket_it < bin_n; bucket_it++) {
 				SAHBucketData bin;
 				bin.num_prims = 0;
+				buckets.emplace_back(bin);
+			}
+			float bucket_length = (c.max[axis] - c.min[axis]) / ((float)bin_n);
+			for (size_t i = start; i < end; i++) {
+				BBox currentPrim = primitives[i].bbox();
+				Vec3 currentPrimCenter = currentPrim.center();
+				
+				float axisloc = currentPrimCenter[axis];
+				size_t actual_index = (size_t)floor((axisloc - c.min[axis]) / bucket_length);
+				if (actual_index == bin_n) {
+					actual_index = bin_n - 1;
+				}
+				buckets[actual_index].bb.enclose(currentPrim);
+				buckets[actual_index].num_prims += 1;
+			}
+			/* for (size_t i = 0; i < bin_n; i++) {
+				if (distance(primitives[i * bin_size + j + start].bbox().min, primitives[i * bin_size + j + start].bbox().max) > 10000) {
+					BBox bad = primitives[i * bin_size + j + start].bbox();
+					std::cout << "something went wrong with primitive " + std::to_string(i * bin_size + j + start) + "\n";
+					std::cout << "Min: (" + std::to_string(bad.min.x) + ", " + std::to_string(bad.min.y) + ", " + std::to_string(bad.min.z) + ") \n";
+					std::cout << "Max: (" + std::to_string(bad.max.x) + ", " + std::to_string(bad.max.y) + ", " + std::to_string(bad.max.z) + ") \n";
+				}
+
+				bin.bb.enclose(primitives[i * bin_size + j + start].bbox());
+				bin.num_prims += 1;
+				// SAHBucketData bin;
+				// bin.num_prims = 0;
 				// sorted by axis so we can just do this
 				for (size_t j = 0; j < bin_size; j++) {
 					if (i * bin_size + j < n) {
@@ -128,16 +157,18 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 							std::cout << "Min: (" + std::to_string(bad.min.x) + ", " + std::to_string(bad.min.y) + ", " + std::to_string(bad.min.z) + ") \n";
 							std::cout << "Max: (" + std::to_string(bad.max.x) + ", " + std::to_string(bad.max.y) + ", " + std::to_string(bad.max.z) + ") \n";
 						}
+
 						bin.bb.enclose(primitives[i * bin_size + j + start].bbox());
-						bin.num_prims += 1;
+						bin.num_prims += 1; 
+
 						// std::cout << "adding prim with center (" + std::to_string(primitives[i * bin_size + j + start].bbox().center().x) + ", " + std::to_string(primitives[i * bin_size + j + start].bbox().center().y) + ", " + std::to_string(primitives[i * bin_size + j + start].bbox().center().z) + ") to bucket " + std::to_string(i) + "\n";
 						// std::cout << "num prims for " + std::to_string(i) + std::to_string(j) + " is " + std::to_string(bin.num_prims) + "\n";
 						// std::cout << std::to_string(i * bin_size + j);
 						// std::cout << std::to_string(primitives[i * bin_size + j].bbox().center()[axis]);
 					}
 				}
-				buckets.emplace_back(bin);
-			}
+				// buckets.emplace_back(bin);
+			} */
 			// std::cout << "second loop\n";
 			
 
@@ -146,12 +177,12 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 				size_t a_count = 0;
 				size_t b_count = 0;
 				for (int k = 0; k < bin_n; k++) {
-					auto compare = [&j, &k]() {
+					/*auto compare = [&j, &k]() {
 						return (k <= j);
-						};
-					if (distance(buckets[k].bb.min, buckets[k].bb.max) > 10000) {
+						};*/
+					/*if (distance(buckets[k].bb.min, buckets[k].bb.max) > 10000) {
 						std::cout << "something went wrong with bucket" + std::to_string(k) + " of size " + std::to_string(buckets[k].num_prims) + "\n";
-					}
+					}*/
 					if (k <= j) {
 						a.enclose(buckets[k].bb);
 						a_count += buckets[k].num_prims;
@@ -165,9 +196,9 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 						// std::cout << "b count " + std::to_string(a_count) + " on round " + std::to_string(k) + "\n";
 					}
 				}
-				if (distance(a.min, a.max) > 10000 || distance(b.min, b.max) > 10000) {
+				/*if (distance(a.min, a.max) > 10000 || distance(b.min, b.max) > 10000) {
 					std::cout << "something went wrong\n";
-				}
+				}*/
 				// std::cout << "a " + std::to_string(a.surface_area()) + " b " + std::to_string(b.surface_area()) + " c " + std::to_string(c.surface_area()) + "\n";
 
 				float asa = a.surface_area();
@@ -175,7 +206,7 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 				float csa = c.surface_area();
 				
 
-				if (asa == 0.0f) {
+				/*if (asa == 0.0f) {
 					asa = distance(a.min, a.max) * 0.0001f;
 				}
 				if (bsa == 0.0f) {
@@ -183,7 +214,7 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 				}
 				if (csa == 0.0f) {
 					csa = distance(c.min, c.max) * 0.0001f;
-				}
+				}*/ // ???
 				/*std::cout << "a " + std::to_string(asa) + " b " + std::to_string(bsa) + " c " + std::to_string(csa) + "\n";
 				std::cout << "AMin: (" + std::to_string(a.min.x) + ", " + std::to_string(a.min.y) + ", " + std::to_string(a.min.z) + ") \n";
 				std::cout << "AMax: (" + std::to_string(a.max.x) + ", " + std::to_string(a.max.y) + ", " + std::to_string(a.max.z) + ") \n";
@@ -211,18 +242,29 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 			//std::cout << "optimized once \n";
 		}
 		//std::cout << "left loop\n";
-		std::cout << "done with best: " + std::to_string(best_cost) + " from partition " + std::to_string(best_partition) + " on axis " + std::to_string(best_axis) + "\n";
+		// std::cout << "done with best: " + std::to_string(best_cost) + " from partition " + std::to_string(best_partition) + " on axis " + std::to_string(best_axis) + "\n";
+		
 		if (!(best_axis == -1)) {
 			// std::cout << "enter case 1\n";
 
 			size_t l = 0;
 			size_t r = 0;
 			size_t m = 0;
-			std::cout << "total: " + std::to_string(end - start) + "; ";
-			std::cout << "best a: " + std::to_string(best_acount) + "; best b: " + std::to_string(best_bcount) + "\n";
+			// std::cout << "total: " + std::to_string(end - start) + "; ";
+			// std::cout << "best a: " + std::to_string(best_acount) + "; best b: " + std::to_string(best_bcount) + "\n";
 			//if (best_acount > max_leaf_size) {
 				// std::cout << "enter recurse 1\n";
-			std::cout << "start: " + std::to_string(start) + "; best_acount: " + std::to_string(best_acount) + "\n";
+			// std::cout << "start: " + std::to_string(start) + "; best_acount: " + std::to_string(best_acount) + "\n";
+			auto compare_prims_end = [&best_axis](const auto& a, const auto& b) {
+				BBox abox = a.bbox();
+				BBox bsbox = b.bbox();
+				Vec3 centera = abox.center();
+				Vec3 centerb = bsbox.center();
+				return centera[best_axis] < centerb[best_axis];
+				};
+
+			std::sort(primitives.begin() + start, primitives.begin() + end, compare_prims_end);
+
 			l = recurse(start, start + best_acount, recurse);
 			//}
 			//else {
@@ -233,9 +275,9 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 			//}
 			//if (best_bcount > max_leaf_size) {
 				// std::cout << "enter recurse 2\n";
-				std::cout << "start: " + std::to_string(start + best_acount) + "; end: " + std::to_string(end) + "\n";
+				// std::cout << "start: " + std::to_string(start + best_acount) + "; end: " + std::to_string(end) + "\n";
 
-				r = recurse(start + best_acount, end, recurse);
+			r = recurse(start + best_acount, end, recurse);
 			//}
 			//else {
 				// std::cout << "Adding Leaf Node from (" + std::to_string(bestb.min.x) + ", " + std::to_string(bestb.min.y) + ", " + std::to_string(bestb.min.z) + ") to (" + std::to_string(bestb.max.x) + ", " + std::to_string(bestb.max.y) + ", " + std::to_string(bestb.max.z) + ")\n";
@@ -261,11 +303,11 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 	size_t m = recurse(0, primitives.size(), recurse);
 	BVH::root_idx = m;
 
-	for (auto nodeit = nodes.begin(); nodeit != nodes.end(); ++nodeit) {
+	/*for (auto nodeit = nodes.begin(); nodeit != nodes.end(); ++nodeit) {
 		Node currentNode = *nodeit;
 		std::cout << "Node " + std::to_string(std::distance(nodes.begin(), nodeit)) +  " from (" + std::to_string(currentNode.bbox.min.x) + ", " + std::to_string(currentNode.bbox.min.y) + ", " + std::to_string(currentNode.bbox.min.z) + ") to (" + std::to_string(currentNode.bbox.max.x) + ", " + std::to_string(currentNode.bbox.max.y) + ", " + std::to_string(currentNode.bbox.max.z) + ")\n";
 		std::cout << "Start: " + std::to_string(currentNode.start) + "; Size: " + std::to_string(currentNode.size) + "; Children: " + std::to_string(currentNode.l) + ", " + std::to_string(currentNode.r) + "\n";
-	} 
+	} */
 	/*auto compare_prims_end = [&best_axis](const auto& a, const auto& b) {
 		BBox abox = a.bbox();
 		BBox bsbox = b.bbox();
@@ -298,7 +340,7 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 	else {
 		new_node(bestb, best_acount, best_bcount, 0, 0);
 	}*/
-	std::cout << "ran once\n";
+	// std::cout << "ran once\n";
 }
 
 template<typename Primitive> Trace BVH<Primitive>::hit(const Ray& ray) const {
@@ -317,6 +359,7 @@ template<typename Primitive> Trace BVH<Primitive>::hit(const Ray& ray) const {
         Trace hit = prim.hit(ray);
         ret = Trace::min(ret, hit);
     }
+
     return ret;
 }
 
