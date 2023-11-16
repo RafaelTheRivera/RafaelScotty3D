@@ -48,18 +48,18 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 		}*/
 		//std::cout << "pass weird case\n";
 		float best_cost = std::numeric_limits<float>::max();
-		int best_partition = 0;
+		// int best_partition = 0;
 		int best_axis = -1; // 0 = x, 1 = y, 2 = z;
 		BBox besta, bestb, c;
 		size_t best_acount = 0;
-		size_t best_bcount = 0;
+		// size_t best_bcount = 0;
 
-		auto distance = [](Vec3 a, Vec3 b) {
+		/*auto distance = [](Vec3 a, Vec3 b) {
 			float xdist = b.x - a.x;
 			float ydist = b.y - a.y;
 			float zdist = b.z - a.z;
 			return sqrt(xdist * xdist + ydist * ydist + zdist * zdist);
-			};
+			};*/
 
 		//calculate c early because it's the same for all
 		//std::cout << "size: " + std::to_string(end-start);
@@ -172,11 +172,11 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 			// std::cout << "second loop\n";
 			
 
-			for (int j = 0; j < (bin_n - 1); j++) {
+			for (size_t j = 0; j < (bin_n - 1); j++) {
 				BBox a, b;
 				size_t a_count = 0;
 				size_t b_count = 0;
-				for (int k = 0; k < bin_n; k++) {
+				for (size_t k = 0; k < bin_n; k++) {
 					/*auto compare = [&j, &k]() {
 						return (k <= j);
 						};*/
@@ -225,12 +225,12 @@ void BVH<Primitive>::build(std::vector<Primitive>&& prims, size_t max_leaf_size)
 				float cost = ((asa / csa) * a_count) + ((bsa / csa) * b_count);
 				if (cost < best_cost) {
 					best_cost = cost;
-					best_partition = j;
+					// best_partition = j;
 					best_axis = axis;
 					besta = a;
 					bestb = b;
 					best_acount = a_count;
-					best_bcount = b_count;
+					// best_bcount = b_count;
 
 				}
 				//std::cout << "checked with cost: " + std::to_string(cost) + " from partition " + std::to_string(j) + " on axis " + std::to_string(axis) + "\n";
@@ -354,13 +354,104 @@ template<typename Primitive> Trace BVH<Primitive>::hit(const Ray& ray) const {
     // Again, remember you can use hit() on any Primitive value.
 
 	//TODO: replace this code with a more efficient traversal:
-    Trace ret;
-    for(const Primitive& prim : primitives) {
-        Trace hit = prim.hit(ray);
-        ret = Trace::min(ret, hit);
-    }
+    Trace best;
+	//Trace best_brute;
+	//int best_prim_num = -1;
 
-    return ret;
+	auto recurseHit = [&](size_t node, Trace bestInScope, auto&& recurseHit){
+		//std::cout << "in: " + std::to_string(node) + "\n";
+		if (nodes.size() <= node) {
+			return bestInScope;
+		}
+		Trace closest = bestInScope;
+		Node currentNode = nodes[node];
+		Vec2 bound = Vec2(-1.0f * std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+		if (currentNode.bbox.hit(ray, bound)) {
+			if (currentNode.is_leaf()) {
+				//std::cout << "leaf";
+				for (size_t i = currentNode.start; i < currentNode.start + currentNode.size; i++) {
+					Trace hit = primitives[i].hit(ray);
+					/*if (hit.hit) {
+						std::cout << "checked primitive with hit distance: " + std::to_string(hit.distance) + "\n";
+					}*/
+					/*if (i == best_prim_num) {
+						std::cout << "checked best primitive within recursion\n";
+					}*/
+					closest = Trace::min(closest, hit);
+					/*if (best.distance == hit.distance && hit.distance != 0.0f) {
+						std::cout << "new best at: " + std::to_string(hit.distance) + "\n";
+					}*/
+				}
+			}
+			else {
+				//std::cout << "node\n";
+				/*Vec2 boundl = Vec2(std::numeric_limits<float>::min(), std::numeric_limits<float>::max());
+				Vec2 boundr = Vec2(std::numeric_limits<float>::min(), std::numeric_limits<float>::max());
+				bool lhit = nodes[currentNode.l].bbox.hit(ray, boundl);
+				bool rhit = nodes[currentNode.r].bbox.hit(ray, boundr);
+				size_t first, second;
+				float hitsecond;
+				if (lhit && rhit) {
+					if (boundl.x <= boundr.x) {
+						first = currentNode.l;
+						second = currentNode.r;
+						hitsecond = boundr.x;
+
+					}
+					else {
+						first = currentNode.r;
+						second = currentNode.l;
+						hitsecond = boundl.x;
+					}
+					closest = Trace::min(closest, recurseHit(first, closest, recurseHit));
+					if (!closest.hit || hitsecond < closest.distance) {
+						// std::cout << "recurse second\n";
+						closest = Trace::min(closest, recurseHit(second, closest, recurseHit));
+					}
+				}
+				else if (lhit) {
+					closest = Trace::min(closest, recurseHit(currentNode.l, closest, recurseHit));
+				}
+				else if (rhit) {
+					closest = Trace::min(closest, recurseHit(currentNode.r, closest, recurseHit));
+				}*/
+				closest = Trace::min(closest, recurseHit(currentNode.l, closest, recurseHit));
+				closest = Trace::min(closest, recurseHit(currentNode.r, closest, recurseHit));
+				
+			}
+		}
+		else {
+			// std::cout << "Missed\n";
+			/*if (best_prim_num >= currentNode.start && best_prim_num < currentNode.start + currentNode.size) {
+				std::cout << "just removed best option in large if/else (node " + std::to_string(node) + ")\n";
+				// std::cout << "sanity check " + std::to_string(std::numeric_limits<float>::min()) + "\n";
+				std::cout << "bounds set to (" + std::to_string(bound.x) + ", " + std::to_string(bound.y) + ")\n";
+			}*/
+			return bestInScope;
+		}
+		return closest;
+		};
+	// const Primitive& besthit;
+	/*for (int current_prim = 0; current_prim < primitives.size(); current_prim++) {
+		const Primitive& prim = primitives[current_prim];
+        Trace hit = prim.hit(ray);
+        best_brute = Trace::min(best_brute, hit);
+		if (best_brute.distance == hit.distance && hit.distance != 0.0f) {
+			// std::cout << "new brute best at: " + std::to_string(hit.distance) + "\n";
+			best_prim_num = current_prim;
+		}
+    }
+	if (best_prim_num != -1) {
+		std::cout << "Best Prim Num = " + std::to_string(best_prim_num) + "\n";
+	}*/
+	// std::cout << "Entering from root " + std::to_string(root_idx) + "\n";
+	best = recurseHit(BVH::root_idx, best, recurseHit);
+	// std::cout << "best hit is " ;
+	/*if (best_brute.distance != best.distance) {
+		std::cout << "problem with ray: correct = " + std::to_string (best_brute.distance) + "; calculated: " + std::to_string(best.distance) + "\n";
+	}*/
+
+    return best;
 }
 
 template<typename Primitive>

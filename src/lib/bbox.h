@@ -88,8 +88,8 @@ struct BBox {
 		float tmin, tmax, tymin, tymax, tzmin, tzmax;
 
 		Vec3 invdir = 1.0f / ray.dir;
-		/*
-		std::cout << "ray: (" + std::to_string(ray.point.x) + ", " + std::to_string(ray.point.y) + ", " + std::to_string(ray.point.z) + ")\n";
+		
+		/*std::cout << "ray: (" + std::to_string(ray.point.x) + ", " + std::to_string(ray.point.y) + ", " + std::to_string(ray.point.z) + ")\n";
 		std::cout << "dir: (" + std::to_string(ray.dir.x) + ", " + std::to_string(ray.dir.y) + ", " + std::to_string(ray.dir.z) + ")\n";
 		std::cout << "min: (" + std::to_string(BBox::min.x) + ", " + std::to_string(BBox::min.y) + ", " + std::to_string(BBox::min.z) + ")\n";
 		std::cout << "max: (" + std::to_string(BBox::max.x) + ", " + std::to_string(BBox::max.y) + ", " + std::to_string(BBox::max.z) + ")\n";
@@ -97,25 +97,58 @@ struct BBox {
 
 		std::cout << "invdir: (" + std::to_string(invdir.x) + ", " + std::to_string(invdir.y) + ", " + std::to_string(invdir.z) + ")\n";
 		*/
+
+		if (invdir.x >= 0) {
+			tmin = (min.x - ray.point.x) * invdir.x;
+			tmax = (max.x - ray.point.x) * invdir.x;
+		}
+		else {
+			tmin = (max.x - ray.point.x) * invdir.x;
+			tmax = (min.x - ray.point.x) * invdir.x;
+		}
+
+		if (invdir.y >= 0) {
+			tymin = (min.y - ray.point.y) * invdir.y;
+			tymax = (max.y - ray.point.y) * invdir.y;
+		}
+		else {
+			tymin = (max.y - ray.point.y) * invdir.y;
+			tymax = (min.y - ray.point.y) * invdir.y;
+		}
+		/*
 		tmin =  (BBox::min.x - ray.point.x) * invdir.x;
+		// (-0.48 - 1.693115) * -3.754548 = 8.159064577
 		tmax =  (BBox::max.x - ray.point.x) * invdir.x;
+		// (0.48 - 1.693115) * -3.754548 = 4.554698497
 		tymin = (BBox::min.y - ray.point.y) * invdir.y;
+		// (-0.48 - 1.574) * -4.224963 = 8.678074002
 		tymax = (BBox::max.y - ray.point.y) * invdir.y;
+		// (0.48 - 1.574) * -4.224963 = 4.622109522*/
 
 		if ((tmin > tymax) || (tymin > tmax)) {
+			// std::cout << "fail 1 \n";
 			return false;
 		}
 		if (tymin > tmin) {
 			tmin = tymin;
 		}
-		if (tymax > tmax) {
+		if (tymax < tmax) {
 			tmax = tymax;
 		}
 
-		tzmin = (BBox::min.z - ray.point.z) * invdir.z;
-		tzmax = (BBox::max.z - ray.point.z) * invdir.z;
+		/*tzmin = (BBox::min.z - ray.point.z) * invdir.z;
+		tzmax = (BBox::max.z - ray.point.z) * invdir.z;*/
+		if (invdir.z >= 0) {
+			tzmin = (min.z - ray.point.z) * invdir.z;
+			tzmax = (max.z - ray.point.z) * invdir.z;
+		}
+		else {
+			tzmin = (max.z - ray.point.z) * invdir.z;
+			tzmax = (min.z - ray.point.z) * invdir.z;
+		}
 
 		if ((tmin > tzmax) || (tzmin > tmax)) {
+			// std::cout << "fail 2 \n";
 			return false;
 		}
 
@@ -127,8 +160,16 @@ struct BBox {
 			tmax = tzmax;
 		}
 
+		
 		if (tmax < times.x || tmin > times.y) {
+			// std::cout << "fail 3 \n";
 			return false;
+		}
+		if (tmax > times.y) {
+			tmax = times.y;
+		}
+		if (tmin < times.x) {
+			tmin = times.x;
 		}
 		// std::cout << "pass with " + std::to_string(tmin) + " - " + std::to_string(tmax) + "\n";
 
