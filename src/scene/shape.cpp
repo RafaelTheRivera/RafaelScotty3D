@@ -32,36 +32,44 @@ PT::Trace Sphere::hit(Ray ray) const {
     // but only the _later_ one is within ray.dist_bounds, you should
     // return that one!
 	float a = ray.dir.norm() * ray.dir.norm();
-	float b = 2 * dot(ray.point, ray.dir);
-	float c = (ray.point.norm() * ray.point.norm()) - (Sphere::radius * Sphere::radius);
-	float disc = (b * b) - (4.0f * a * c);
-	float t1 = 0.0f;
-	float t2 = 0.0f;
+    float b = 2 * dot(ray.point, ray.dir);
+    float c = (ray.point.norm() * ray.point.norm()) - (Sphere::radius * Sphere::radius);
+    float disc = (b * b) - (4.0f * a * c);
 
-	auto in_bounds = [&ray](float t) {
-		return (t > ray.dist_bounds.x && t < ray.dist_bounds.y);
-	};
-	// std::cout << "discriminant = " + std::to_string(disc) + "\n";
     PT::Trace ret;
     ret.origin = ray.point;
-	if (disc > 0.0f) {
-		t1 = ((-1.0f * b) + sqrt(disc)) / (2.0f * a); // further
-		t2 = ((-1.0f * b) - sqrt(disc)) / (2.0f * a); // closer
-		ret.hit = true;
-	}
-	else {
-		ret.hit = false;
-	}
-	if (in_bounds(t1) && !in_bounds(t2)) {
-		ret.distance = t1;
-	}
-	else {
-		ret.distance = t2;
-	}   // at what distance did the intersection occur?
+    ret.hit = false; 
 
-    ret.position = ray.point + (ret.distance * ray.dir); // where was the intersection?
-    ret.normal = ret.position.unit();   // what was the surface normal at the intersection?
-	ret.uv = Sphere::uv(ret.normal); 	   // what was the uv coordinates at the intersection? (you may find Sphere::uv to be useful)
+    if (disc >= 0.0f) {
+        float t1 = ((-b) + sqrt(disc)) / (2.0f * a);
+        float t2 = ((-b) - sqrt(disc)) / (2.0f * a);
+
+        auto in_bounds = [&ray](float t) {
+            return (t > ray.dist_bounds.x && t < ray.dist_bounds.y);
+        };
+
+        bool inBoundsT1 = in_bounds(t1);
+        bool inBoundsT2 = in_bounds(t2);
+
+        if (inBoundsT1 && inBoundsT2) {
+            ret.distance = std::min(t1, t2);
+            ret.hit = true;
+        } else if (inBoundsT1) {
+            ret.distance = t1;
+            ret.hit = true;
+        } else if (inBoundsT2) {
+            ret.distance = t2;
+            ret.hit = true;
+        }
+    }
+
+    if (ret.hit) {
+        // Calculate the intersection point, normal, and uv coordinates
+        ret.position = ray.point + (ret.distance * ray.dir); // Intersection point
+        ret.normal = ret.position.unit();  // Surface normal at the intersection
+        ret.uv = Sphere::uv(ret.normal);   // UV coordinates at the intersection
+    }
+
     return ret;
 }
 

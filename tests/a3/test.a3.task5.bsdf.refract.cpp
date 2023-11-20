@@ -22,6 +22,6 @@ Test test_a3_task5_bsdf_refract_simple("a3.task5.bsdf.refract.simple", []() {
 						   + "Vec3{" + std::to_string(s.direction.x) + ", " + std::to_string(s.direction.y) + ", " + std::to_string(s.direction.z) + "} instead");
 	}
 	if (Test::differs(s.attenuation, 1.0f * tm)) {
-		throw Test::error("Attenuation is incorrect!");
+		throw Test::error("Attenuation is incorrect!: (" + std::to_string(s.attenuation.r) + ", " + std::to_string(s.attenuation.g) + ", " + std::to_string(s.attenuation.b) + ")");
 	}
 });

@@ -8,10 +8,10 @@
 
 namespace PT {
 
-constexpr bool SAMPLE_AREA_LIGHTS = false;
-constexpr bool RENDER_NORMALS = true;
-constexpr bool LOG_CAMERA_RAYS = true;
-constexpr bool LOG_AREA_LIGHT_RAYS = false;
+constexpr bool SAMPLE_AREA_LIGHTS = true;
+constexpr bool RENDER_NORMALS = false;
+constexpr bool LOG_CAMERA_RAYS = false;
+constexpr bool LOG_AREA_LIGHT_RAYS = true;
 static thread_local RNG log_rng(0x15462662); //separate RNG for logging a fraction of rays to avoid changing result when logging enabled
 
 Spectrum Pathtracer::sample_direct_lighting_task4(RNG &rng, const Shading_Info& hit) {
@@ -27,14 +27,47 @@ Spectrum Pathtracer::sample_direct_lighting_task4(RNG &rng, const Shading_Info& 
     Spectrum radiance = sum_delta_lights(hit);
 
 	//TODO: ask hit.bsdf to sample an in direction that would scatter out along hit.out_dir
-
+	Materials::Scatter r = hit.bsdf.scatter(rng, hit.out_dir, hit.uv);
+	
 	//TODO: rotate that direction into world coordinates
+	Vec3 worldDir = hit.object_to_world.rotate(r.direction); 
 
 	//TODO: construct a ray travelling in that direction
 	// NOTE: because we want emitted light only, can use depth = 0 for the ray
+	Ray newRay;
+	newRay.point = hit.pos;
+	newRay.dir = worldDir;
+	newRay.dist_bounds = Vec2{0.00001f, std::numeric_limits<float>::infinity()};
+	newRay.depth = 0;
 
 	//TODO: trace() the ray to get the emitted light (first part of the return value)
+	std::pair<Spectrum, Spectrum> trace_results = Pathtracer::trace(rng, newRay);
+	
+	float newpdf = hit.bsdf.pdf(hit.out_dir, r.direction);
+	
+	
+	// radiance += PI_F * (trace_results.first * r.attenuation);
+	if (hit.bsdf.is_specular()){
+		radiance += trace_results.first * r.attenuation;
+	} else {
+		radiance += ((trace_results.first * r.attenuation) / newpdf);
+	}
 
+	// radiance = radiance / ((float)delta_lights.size() + 1.0f);
+	// radiance += ((trace_results.first * r.attenuation * r.direction.y) / newpdf);
+
+	if constexpr (LOG_AREA_LIGHT_RAYS) {
+		if (log_rng.coin_flip(0.00001f)) {
+			log_ray(newRay, 100.0f);
+			// std::cout << "1 pdf result: " + std::to_string(newpdf) + "\n";
+			// std::cout << "1Attenuation of r: (" + std::to_string(r.attenuation.r) + ", " + std::to_string(r.attenuation.g) + ", " + std::to_string(r.attenuation.b) + ")\n"; 
+			// std::cout << "Trace Results 1st: (" + std::to_string(trace_results.first.r) + ", " + std::to_string(trace_results.first.g) + ", " + std::to_string(trace_results.first.b) + ")\n"; 
+			// std::cout << "Calculated Radiance: (" + std::to_string(radiance.r) + ", " + std::to_string(radiance.g) + ", " + std::to_string(radiance.b) + ")\n"; 
+		}
+	}
+	/*if (trace_results.first.r + trace_results.first.g + trace_results.first.b > 0.000001f) {
+		std::cout << "Something actually hit\n";
+	} */
 	//TODO: weight properly depending on the probability of the sampled scattering direction and add to radiance
 
 	return radiance;
@@ -48,10 +81,53 @@ Spectrum Pathtracer::sample_direct_lighting_task6(RNG &rng, const Shading_Info& 
     // sample area lights using mixture sampling.
 	Spectrum radiance = sum_delta_lights(hit);
 
-	// Example of using log_ray():
-	if constexpr (LOG_AREA_LIGHT_RAYS) {
-		if (log_rng.coin_flip(0.001f)) log_ray(Ray(), 100.0f);
+	Ray ray_sample;
+
+	if (hit.bsdf.is_specular()){
+		// need same behavior as task4? might as well call task4!
+		return sample_direct_lighting_task4(rng, hit);
+	} 
+	
+	Vec3 localDir, worldDir;
+	if (rng.coin_flip(.5f)) {
+		// Scatter Case
+		Materials::Scatter r = hit.bsdf.scatter(rng, hit.out_dir, hit.uv);
+		
+		localDir = r.direction;
+		worldDir = hit.object_to_world.rotate(r.direction); 
+
+		ray_sample.point = hit.pos;
+		ray_sample.dir = worldDir;
+		ray_sample.dist_bounds = Vec2{0.00001f, std::numeric_limits<float>::infinity()};
+		ray_sample.depth = 0;
+	} else {
+		// Sample Area Lights Case
+		ray_sample.point = hit.pos;
+		ray_sample.dir = sample_area_lights(rng, hit.pos);
+		ray_sample.dist_bounds = Vec2{0.00001f, std::numeric_limits<float>::infinity()};
+		ray_sample.depth = 0;
+
+		localDir = hit.world_to_object.rotate(ray_sample.dir);
+		worldDir = ray_sample.dir;
 	}
+	
+	std::pair<Spectrum, Spectrum> trace_results = Pathtracer::trace(rng, ray_sample);
+	if constexpr (LOG_AREA_LIGHT_RAYS) {
+		if (log_rng.coin_flip(0.00001f)) {
+			log_ray(ray_sample, 100.0f);
+		}
+	}
+	Spectrum eval = hit.bsdf.evaluate(hit.out_dir, ray_sample.dir, hit.uv);
+	float scatter_pdf = hit.bsdf.pdf(hit.out_dir, localDir);
+	float sample_pdf = area_lights_pdf(ray_sample.point, worldDir);
+	float final_pdf = (scatter_pdf + sample_pdf) / 2.0f;
+
+	radiance += ((trace_results.first * eval) / final_pdf);
+	// Example of using log_ray():
+	/*if constexpr (LOG_AREA_LIGHT_RAYS) {
+		if (log_rng.coin_flip(0.001f)) log_ray(Ray(), 100.0f);
+	}*/
+
 
 	return radiance;
 }
@@ -65,17 +141,47 @@ Spectrum Pathtracer::sample_indirect_lighting(RNG &rng, const Shading_Info& hit)
 	//NOTE: this function and sample_direct_lighting_task4() perform very similar tasks.
 
 	//TODO: ask hit.bsdf to sample an in direction that would scatter out along hit.out_dir
+	Materials::Scatter r = hit.bsdf.scatter(rng, hit.out_dir, hit.uv);
+	//TODO: rotate that direction into world coordinates 
+	Vec3 worldDir = hit.object_to_world.rotate(r.direction); 
+	// Vec3 dir = r.direction + hit.normal;
 
-	//TODO: rotate that direction into world coordinates
 
 	//TODO: construct a ray travelling in that direction
+	Ray newRay;
+	newRay.point = hit.pos;
+	newRay.dir = worldDir;
+	newRay.dist_bounds = Vec2{0.00001f, std::numeric_limits<float>::infinity()};
+	newRay.depth = hit.depth-1;
 	// NOTE: be sure to reduce the ray depth! otherwise infinite recursion is possible
-
+	// std::cout << "w";
+	
 	//TODO: trace() the ray to get the reflected light (the second part of the return value)
-
+	std::pair<Spectrum, Spectrum> trace_results = Pathtracer::trace(rng, newRay);
+	//trace_results.second;
 	//TODO: weight properly depending on the probability of the sampled scattering direction and set radiance
-
 	Spectrum radiance;
+	float newpdf = hit.bsdf.pdf(hit.out_dir, r.direction);
+	// radiance = PI_F * (trace_results.second * r.attenuation);
+	if (hit.bsdf.is_specular()){
+		radiance = trace_results.second * r.attenuation;
+	} else {
+		radiance = ((trace_results.second * r.attenuation) / newpdf);
+	}
+	if constexpr (LOG_AREA_LIGHT_RAYS) {
+		if (log_rng.coin_flip(0.00001f)) {
+			log_ray(newRay, 100.0f);
+			// std::cout << "2 pdf result: " + std::to_string(newpdf) + "\n";
+			// std::cout << "Depth: " + std::to_string(newRay.depth) + "\n";
+			// std::cout << "2Attenuation of r: (" + std::to_string(r.attenuation.r) + ", " + std::to_string(r.attenuation.g) + ", " + std::to_string(r.attenuation.b) + ")\n"; 
+			// std::cout << "Trace Results 2nd: (" + std::to_string(trace_results.second.r) + ", " + std::to_string(trace_results.second.g) + ", " + std::to_string(trace_results.second.b) + ")\n"; 
+			// std::cout << "Calculated Radiance: (" + std::to_string(radiance.r) + ", " + std::to_string(radiance.g) + ", " + std::to_string(radiance.b) + ")\n"; 
+		}
+	}
+	
+	/*if (trace_results.second.r + trace_results.second.g + trace_results.second.b > 0.000001f) {
+		std::cout << "Something actually hit\n";
+	} */
     return radiance;
 }
 

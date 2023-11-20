@@ -54,7 +54,7 @@ Trace Triangle::hit(const Ray& ray) const {
 
 	float w = 1.0f - uvt.x - uvt.y;
 
-	if (w < 0.0f || uvt.x < 0.0f || uvt.y < 0.0f) {
+	if (w < 0.0f || uvt.x < 0.0f || uvt.y < 0.0f || uvt.z < ray.dist_bounds.x || uvt.z > ray.dist_bounds.y) {
 		override = true;
 	} 
 
