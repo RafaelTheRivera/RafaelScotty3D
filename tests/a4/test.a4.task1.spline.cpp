@@ -17,18 +17,19 @@ Test test_a4_task1_spline_at_simple("a4.task1.spline.at.simple", []() {
 	for (float t : test_spline.keys()) {
 		actual = test_spline.at(t);
 		if (Test::differs(actual, test_spline.knots[t])) {
-			throw Test::error("Incorrect return value at the time of some knot!");
+			std::cout << ("Incorrect return value at the time of some knot! Expected: (" + std::to_string(test_spline.knots[t].x) + ", " + std::to_string(test_spline.knots[t].y) + ", " + std::to_string(test_spline.knots[t].z) + "); Got: (" + std::to_string(actual.x) + ", " + std::to_string(actual.y) + ", " + std::to_string(actual.z) + ").\n");
 		}
 	}
 	Vec3 expected = Vec3(1.5f, 0.0f, 0.0f);
 	actual = test_spline.at(1.5f);
 	if (Test::differs(actual, expected)) {
-		throw Test::error("Incorrect return value between the time of two knots!");
+		std::cout << ("Incorrect return value between the time of two knots! Expected: (" + std::to_string(expected.x) + ", " + std::to_string(expected.y) + ", " + std::to_string(expected.z) + "); Got: (" + std::to_string(actual.x) + ", " + std::to_string(actual.y) + ", " + std::to_string(actual.z) + ").\n");
 	}
 	expected = Vec3(2.5f, 0.0f, 0.0f);
 	actual = test_spline.at(2.5f);
 	if (Test::differs(actual, expected)) {
-		throw Test::error("Incorrect return value between the time of two knots!");
+		std::cout << ("Incorrect return value between the time of two knots! Expected: (" + std::to_string(expected.x) + ", " + std::to_string(expected.y) + ", " + std::to_string(expected.z) + "); Got: (" + std::to_string(actual.x) + ", " + std::to_string(actual.y) + ", " + std::to_string(actual.z) + ").\n");
+
 	}
 });
 

@@ -46,9 +46,22 @@ std::vector< Mat4 > Skeleton::bind_pose() const {
 	//NOTE: bones is guaranteed to be ordered such that parents appear before child bones.
 
 	for (auto const &bone : bones) {
-		(void)bone; //avoid complaints about unused bone
+		// (void)bone; //avoid complaints about unused bone
+		Mat4 tcurrent;
+		if (bone.parent == -1U) {
+			// base bone
+			tcurrent = Mat4::translate(Skeleton::base);
+		}
+		else {
+			tcurrent = bind[bone.parent] * Mat4::translate(bone.extent);
+			std::cout << "blah\n";
+			std::cout << bind[bone.parent];
+			std::cout << "\n";
+			std::cout << Mat4::translate(bone.extent);
+			std::cout << "\n";
+		}
 		//placeholder -- your code should actually compute the correct transform:
-		bind.emplace_back(Mat4::I);
+		bind.emplace_back(tcurrent);
 	}
 
 	assert(bind.size() == bones.size()); //should have a transform for every bone.
@@ -66,8 +79,29 @@ std::vector< Mat4 > Skeleton::current_pose() const {
 	//Useful functions:
 	//Bone::compute_rotation_axes() will tell you what axes (in local bone space) Bone::pose should rotate around.
 	//Mat4::angle_axis(angle, axis) will produce a matrix that rotates angle (in degrees) around a given axis.
+	std::vector< Mat4 > pose;
+	pose.reserve(bones.size());
 
-	return std::vector< Mat4 >(bones.size(), Mat4::I);
+	//NOTE: bones is guaranteed to be ordered such that parents appear before child bones.
+
+	for (auto const& bone : bones) {
+		// (void)bone; //avoid complaints about unused bone
+		Mat4 tcurrent;
+		if (bone.parent == -1U) {
+			// base bone
+			tcurrent = Mat4::translate(Skeleton::base) + Mat4::translate(base_offset);
+		}
+		else {
+			Vec3 poseNow = bone.pose;
+			// bone.compute_rotation_axes(poseNow.x, poseNow.y, poseNow.z);
+			tcurrent = pose[bone.parent] * (Mat4::translate(bone.extent) * Mat4::angle_axis(bone.roll, poseNow));
+		}
+		//placeholder -- your code should actually compute the correct transform:
+		pose.emplace_back(tcurrent);
+	}
+
+	assert(pose.size() == pose.size()); //should have a transform for every bone.
+	return pose;
 
 }
 
