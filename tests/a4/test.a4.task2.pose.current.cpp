@@ -36,9 +36,17 @@ Test test_a4_task2_pose_current_simple("a4.task2.pose.current.simple", []() {
     std::vector<Mat4> actual = skeleton.current_pose();
 
 	if (Test::differs(expected[0], actual[0])) {
+		std::cout << expected[0];
+		std::cout << "\n";
+		std::cout << actual[0];
+		std::cout << "\n";
 		throw Test::error("Test failed on the root!");
 	}
 	if (Test::differs(expected[1], actual[1])) {
+		std::cout << expected[1];
+		std::cout << "\n";
+		std::cout << actual[1];
+		std::cout << "\n";
 		throw Test::error("Test failed on the first child joint!");
 	}
 });

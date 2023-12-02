@@ -3,6 +3,7 @@
 #include "test.h"
 #include <iostream>
 
+
 void Skeleton::Bone::compute_rotation_axes(Vec3 *x_, Vec3 *y_, Vec3 *z_) const {
 	assert(x_ && y_ && z_);
 	auto &x = *x_;
@@ -50,15 +51,15 @@ std::vector< Mat4 > Skeleton::bind_pose() const {
 		Mat4 tcurrent;
 		if (bone.parent == -1U) {
 			// base bone
-			tcurrent = Mat4::translate(Skeleton::base);
+			tcurrent = Mat4::translate(base);
 		}
 		else {
-			tcurrent = bind[bone.parent] * Mat4::translate(bone.extent);
-			std::cout << "blah\n";
+			tcurrent = bind[bone.parent] * Mat4::translate(bones[bone.parent].extent);
+			/*std::cout << "blah\n";
 			std::cout << bind[bone.parent];
 			std::cout << "\n";
 			std::cout << Mat4::translate(bone.extent);
-			std::cout << "\n";
+			std::cout << "\n";*/
 		}
 		//placeholder -- your code should actually compute the correct transform:
 		bind.emplace_back(tcurrent);
@@ -83,18 +84,22 @@ std::vector< Mat4 > Skeleton::current_pose() const {
 	pose.reserve(bones.size());
 
 	//NOTE: bones is guaranteed to be ordered such that parents appear before child bones.
-
 	for (auto const& bone : bones) {
 		// (void)bone; //avoid complaints about unused bone
 		Mat4 tcurrent;
 		if (bone.parent == -1U) {
 			// base bone
-			tcurrent = Mat4::translate(Skeleton::base) + Mat4::translate(base_offset);
+			// Vec3 poseNow = bone.pose;
+			Vec3 xAxis, yAxis, zAxis;
+			bone.compute_rotation_axes(&xAxis, &yAxis, &zAxis);
+			tcurrent = (Mat4::translate(base + base_offset)) * Mat4::angle_axis(bone.pose.z, zAxis) * Mat4::angle_axis(bone.pose.y, yAxis) * Mat4::angle_axis(bone.pose.x, xAxis);
 		}
 		else {
-			Vec3 poseNow = bone.pose;
-			// bone.compute_rotation_axes(poseNow.x, poseNow.y, poseNow.z);
-			tcurrent = pose[bone.parent] * (Mat4::translate(bone.extent) * Mat4::angle_axis(bone.roll, poseNow));
+			// Vec3 poseNow = bone.pose;
+			Vec3 xAxis, yAxis, zAxis;
+			bone.compute_rotation_axes(&xAxis, &yAxis, &zAxis);
+			Vec3 parentExtent = bones[bone.parent].extent;
+			tcurrent = pose[bone.parent] * (Mat4::translate(parentExtent) * Mat4::angle_axis(bone.pose.z, zAxis) * Mat4::angle_axis(bone.pose.y, yAxis) * Mat4::angle_axis(bone.pose.x, xAxis));
 		}
 		//placeholder -- your code should actually compute the correct transform:
 		pose.emplace_back(tcurrent);
@@ -112,22 +117,174 @@ std::vector< Vec3 > Skeleton::gradient_in_current_pose() const {
 
 	//The IK energy is the sum over all *enabled* handles of the squared distance from the tip of Handle::bone to Handle::target
 	std::vector< Vec3 > gradient(bones.size(), Vec3{0.0f, 0.0f, 0.0f});
+	
+	// We can use this to move into skeleton space (by undoing the move into world space)
+	std::vector< Mat4 > pose = current_pose();
 
 	//TODO: loop over handles and over bones in the chain leading to the handle, accumulating gradient contributions.
 	//remember bone.compute_rotation_axes() -- should be useful here, too!
+	for (auto const& handle : handles) {
+		if (!handle.enabled) {
+			continue;
+		}
+		BoneIndex boneNow = handle.bone;
+		Bone thisBone = bones[handle.bone];
+		std::vector<BoneIndex> currentHierarchy;
+		// Generate list of current relevant bones
+		while (boneNow != -1U) {
+			currentHierarchy.emplace(currentHierarchy.begin(),boneNow);
+			boneNow = bones[boneNow].parent;
+		}
+		// Vector of bones in chain
+		
+		Mat4 s2l;
+		Mat4 worldToSkeleton = Mat4::inverse(pose[0]);
+		/*std::cout << "pose[0]: ";
+		std::cout << pose[0];
+		std::cout << "\n";
+		std::cout << "w2s: ";
+		std::cout << worldToSkeleton;
+		std::cout << "\n";
+		std::cout << "pose[bone]: ";
+		std::cout << pose[handle.bone];
+		std::cout << "\n";*/
+		Vec3 xAxis, yAxis, zAxis;
+		thisBone.compute_rotation_axes(&xAxis, &yAxis, &zAxis);
+		
+		s2l = pose[handle.bone];
+		/*s2l = worldToSkeleton * pose[handle.bone];
+		xAxis = worldToSkeleton * xAxis;
+		yAxis = worldToSkeleton * yAxis;
+		zAxis = worldToSkeleton * zAxis;*/
+		
+		/*if ((bones[handle.bone]).parent == -1U) {
+			s2l = worldToSkeleton;
+		}
+		else {
+			//s2l, x, y, z were here before?
+		}*/
+		//Vec3 p = s2l * Mat4::angle_axis() * handle.target;
+		Vec3 h = handle.target;
+		Vec3 p = s2l * thisBone.extent;
+		/*std::cout << "s2l: ";
+		std::cout << s2l;
+		std::cout << "\n";
+		std::cout << "target: " + to_string(handle.target) + "\n";
+		//Vec4 target = Vec4(handle.target,1.0f);
+		// Vec3 p = s2l * target;
+		//float fourth = dot(s2l[3], target);
+		// Unsure why * kept breaking here, decided to do the same operation 
+		// by hand and it comes up with something different.
+		//Vec3 p = Vec3{ dot(s2l[0], target)/fourth, dot(s2l[1], target) / fourth, dot(s2l[2], target) / fourth };
+		Vec3 p = s2l * thisBone.extent;// *Mat4::angle_axis(thisBone.pose.z, zAxis)* Mat4::angle_axis(thisBone.pose.y, yAxis)* Mat4::angle_axis(thisBone.pose.x, xAxis);
 
+		std::cout << "h: " + to_string(h) + "\n";
+		std::cout << "p: " + to_string(p) + "\n";*/
+
+		//Vec3 p = s2lNow * Vec3();
+		//std::vector<Mat4> transformations(currentHierarchy.size(), Mat4::I);
+		Mat4 xRot = Mat4::I;
+		Mat4 yRot = Mat4::I;
+		Mat4 zRot = Mat4::I;
+
+		for (size_t i = 0; i < currentHierarchy.size(); i++) {
+			BoneIndex index = currentHierarchy[i];
+			Bone current = bones[index];
+			Mat4 xf;
+			Vec3 cxAxis, cyAxis, czAxis; 
+			current.compute_rotation_axes(&cxAxis, &cyAxis, &czAxis);
+
+			if (current.parent == -1U) {
+				// xf = Mat4::I;
+				// transformations[i] = Mat4::angle_axis(current.pose.z, czAxis) * Mat4::angle_axis(current.pose.y, cyAxis) * Mat4::angle_axis(current.pose.x, cxAxis);
+				//xf = transformations[i];
+				// xRot = Mat4::angle_axis(current.pose.x, cxAxis);
+				// yRot = Mat4::angle_axis(current.pose.y, cyAxis);
+				// zRot = Mat4::angle_axis(current.pose.z, czAxis);
+				xf = pose[index];
+			}
+			else {
+				// Vec3 parentExtent = bones[current.parent].extent;
+				// transformations[i] = transformations[i - 1] * Mat4::angle_axis(current.pose.z, czAxis) * Mat4::angle_axis(current.pose.y, cyAxis) * Mat4::angle_axis(current.pose.x, cxAxis);
+				//Mat4 worldToSkeleton = Mat4::inverse(pose[0]);
+				// xf = transformations[i] * worldToSkeleton * pose[index];
+				// xf = transformations[i];
+				xf = pose[index];
+				/*cxAxis = transformations[i] * cxAxis;
+				cyAxis = transformations[i] * cyAxis;
+				czAxis = transformations[i] * czAxis;*/
+			}
+			/*std::cout << "xf: ";
+			std::cout << xf;
+			std::cout << "\n";*/
+			Vec3 r = xf * Vec3(0.0f, 0.0f, 0.0f);
+			// Mat4 xf2 = Mat4::angle_axis(current.pose.z, czAxis) * Mat4::angle_axis(current.pose.y, cyAxis) * Mat4::angle_axis(current.pose.x, cxAxis);
+			/*Vec4 tcxAxis = Mat4::angle_axis(current.pose.x, cxAxis) * Vec4(cxAxis, 0.0f);
+			Vec4 tcyAxis = Mat4::angle_axis(current.pose.y, cyAxis) * Vec4(cyAxis,0.0f);
+			Vec4 tczAxis = Mat4::angle_axis(current.pose.z, czAxis) * Vec4(czAxis, 0.0f);
+			cxAxis = Vec3(tcxAxis.x, tcxAxis.y, tcxAxis.z);
+			cyAxis = Vec3(tcyAxis.x, tcyAxis.y, tcyAxis.z);
+			czAxis = Vec3(tczAxis.x, tczAxis.y, tczAxis.z);*/
+			cxAxis = xf.rotate(cxAxis);
+			cyAxis = xf.rotate(cyAxis);
+			czAxis = xf.rotate(czAxis);
+			/*std::cout << "r: " + to_string(r) + "\n";
+			std::cout << "x axis: " + to_string(cxAxis) + "\n";
+			std::cout << "y axis: " + to_string(cyAxis) + "\n";
+			std::cout << "z axis: " + to_string(czAxis) + "\n";*/
+			// std::cout << "x axis take 2: " + to_string(xf2 * cxAxis) + "\n";
+			// std::cout << "y axis take 2: " + to_string(xf2 * cyAxis) + "\n";
+			// std::cout << "z axis take 2: " + to_string(xf2 * czAxis) + "\n";
+			Vec3 testpr = p - r;
+			/*std::cout << "p - r: " + to_string(testpr) + "\n";
+			std::cout << "p - h: " + to_string(p-h) + "\n";
+			std::cout << "cx cross: " + to_string(cross(cxAxis, (p - r))) + "\n";
+			std::cout << "cy cross: " + to_string(cross(cyAxis, (p - r))) + "\n";
+			std::cout << "cz cross: " + to_string(cross(czAxis, (p - r))) + "\n";*/
+			gradient[index].x += dot(cross(cxAxis, (p - r)), p - h);
+			gradient[index].y += dot(cross(cyAxis, (p - r)), p - h);
+			gradient[index].z += dot(cross(czAxis, (p - r)), p - h);
+			//std::cout << "updated gradient at index " + std::to_string(index) + " to: (" + std::to_string(gradient[index].x) + ", " + std::to_string(gradient[index].y) + ", " + std::to_string(gradient[index].z) + ")\n";
+		}
+
+
+	}
 	assert(gradient.size() == bones.size());
 	return gradient;
 }
 
 bool Skeleton::solve_ik(uint32_t steps) {
 	//A4T2b - gradient descent
-	//check which handles are enabled
 	//run `steps` iterations
-	
+
 	//call gradient_in_current_pose() to compute d loss / d pose
 	//add ...
-
+	// if (true) { return false; };
+	float timestep = 1.0f;
+	float last_cost = 0.0f;
+	for (size_t i = 0; i < steps; i++) {
+		std::vector< Vec3 > grad = gradient_in_current_pose();
+		std::vector< Mat4 > pose = current_pose();
+		
+		float cost = 0.0f;
+		for (Handle const& handle : handles) {
+			Vec3 h = handle.target;
+			Vec3 p = pose[handle.bone] * bones[handle.bone].extent;
+			auto dist = [](Vec3 in) {
+				return sqrt(in.x * in.x + in.y * in.y + in.z * in.z);
+			};
+			float temp = dist(p - h);
+			cost += 0.5f * temp * temp;
+		}
+		if (cost < 0.0001f || cost - last_cost < 0.0001f) {
+			//extra clause for if it can't reach. 
+			return true;
+		}
+		last_cost = cost;
+		for (size_t j = 0; j < bones.size(); j++) {
+			bones[j].pose -= timestep * grad[j];
+		}
+	}
 	//if at a local minimum (e.g., gradient is near-zero), return 'true'.
 	//if run through all steps, return `false`.
 	return false;
